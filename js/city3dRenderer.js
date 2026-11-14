@@ -271,10 +271,6 @@ export class City3DRenderer {
     }
   }
 
-  /**
-   * Builds roads, instanced road dashes, instanced streetlamps, and instanced railway sleepers
-   * to keep draw calls minimal while maintaining dense 1:1 metric street detail.
-   */
   buildRoadsAndRailway() {
     const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.85 });
     const asphaltMat = new THREE.MeshStandardMaterial({ color: 0x2d333b, roughness: 0.88 });
@@ -381,7 +377,6 @@ export class City3DRenderer {
     flushInstanced(new THREE.BoxGeometry(2.2, 0.12, 0.12), poleMat, armMatrices);
     flushInstanced(new THREE.BoxGeometry(0.65, 0.18, 0.32), bulbMat, bulbMatrices);
 
-    // Railway Line with GPU-Instanced Sleepers
     const ballastMat = new THREE.MeshStandardMaterial({ color: 0x443b32, roughness: 0.95 });
     const sleeperMat = new THREE.MeshStandardMaterial({ color: 0x261e18, roughness: 0.9 });
     const railMat = new THREE.MeshStandardMaterial({
@@ -433,10 +428,6 @@ export class City3DRenderer {
     flushInstanced(new THREE.BoxGeometry(0.26, 0.16, 2.75), sleeperMat, sleeperMatrices);
   }
 
-  /**
-   * Builds all landmarks, dedicated functional buildings, and urban blocks,
-   * flushing repetitive 3D details into GPU InstancedMeshes.
-   */
   buildAllBuildingsAndLandmarks() {
     const batcher = new BuildingInstanceBatcher();
 
@@ -513,9 +504,6 @@ export class City3DRenderer {
     batcher.flushToScene(this.scene);
   }
 
-  /**
-   * Renders all 620 trees using 3 GPU InstancedMeshes (3 draw calls total instead of 1,860!)
-   */
   buildTreesInstanced() {
     const trees = this.urbanLayout.trees;
     if (!trees.length) return;
@@ -804,12 +792,15 @@ export class City3DRenderer {
     return group;
   }
 
-  renderWorld(cameraState, player, vehicles, elapsed) {
+  renderWorld(cameraState, player, vehicles, elapsed, spectator = null) {
     const dt = Math.min(0.05, Math.max(0.001, elapsed - this._lastElapsed));
     this._lastElapsed = elapsed;
 
-    this.playerMesh.visible = !player.inVehicle;
-    if (!player.inVehicle) {
+    const isSpectator = Boolean(spectator && spectator.active);
+
+    // Sync 3D Player Mesh (hidden in Spectator Mode)
+    this.playerMesh.visible = !isSpectator && !player.inVehicle;
+    if (!isSpectator && !player.inVehicle) {
       this.playerMesh.position.set(player.x, 0.22, player.y);
       this.playerMesh.rotation.y = -player.angle;
 
@@ -820,6 +811,7 @@ export class City3DRenderer {
       this.rightArm.rotation.z = swing * 0.8;
     }
 
+    // Sync 3D Vehicle Meshes
     for (const v of vehicles) {
       let mesh = this.vehicleMeshes.get(v);
       if (!mesh) {
@@ -830,18 +822,35 @@ export class City3DRenderer {
       mesh.rotation.y = -v.angle;
     }
 
+    // Determine active camera focus for LOD & shadow frustum
+    const focusX = isSpectator
+      ? spectator.followVehicle
+        ? spectator.followVehicle.x
+        : spectator.x
+      : cameraState.targetX;
+    const focusZ = isSpectator
+      ? spectator.followVehicle
+        ? spectator.followVehicle.y
+        : spectator.z
+      : cameraState.targetZ;
+
     // Distance LOD Culling for building sub-details beyond 420m
     const lodRadiusSq = 420 * 420;
     for (let i = 0; i < this.lodBuildings.length; i++) {
       const b = this.lodBuildings[i];
-      const dx = b.position.x - cameraState.targetX;
-      const dz = b.position.z - cameraState.targetZ;
+      const dx = b.position.x - focusX;
+      const dz = b.position.z - focusZ;
       b.userData.detailGroup.visible = dx * dx + dz * dz < lodRadiusSq;
     }
 
-    // Update interactive functional buildings (Safehouse, Auto Workshop, Clinic, Bazaar, Station)
+    // Update interactive functional buildings only in Playable Mode
     if (this.functionalBuildings) {
-      this.functionalBuildings.update(player, vehicles, this.vehicleMeshes, elapsed, dt);
+      if (!isSpectator) {
+        this.functionalBuildings.update(player, vehicles, this.vehicleMeshes, elapsed, dt);
+      } else {
+        const promptEl = document.getElementById("buildingActionPrompt");
+        if (promptEl) promptEl.style.display = "none";
+      }
     }
 
     for (const s of this.sirenLights) {
@@ -854,8 +863,9 @@ export class City3DRenderer {
       w.position.y = 0.06 + Math.sin(elapsed * 2.2) * 0.03;
     }
 
+    // Hijack ring only shown in Playable Mode on foot
     this.hijackRing.visible = false;
-    if (!player.inVehicle) {
+    if (!isSpectator && !player.inVehicle) {
       let nearest = null;
       let bestDist = 4.2;
       for (const v of vehicles) {
@@ -873,27 +883,37 @@ export class City3DRenderer {
       }
     }
 
-    this.sunLight.position.set(cameraState.targetX + 260, 420, cameraState.targetZ + 220);
-    this.sunLight.target.position.set(cameraState.targetX, 0, cameraState.targetZ);
+    this.sunLight.position.set(focusX + 260, 420, focusZ + 220);
+    this.sunLight.target.position.set(focusX, 0, focusZ);
     this.sunLight.target.updateMatrixWorld();
 
-    const dist = cameraState.distance;
-    const pitch = cameraState.pitch;
-    const yaw = cameraState.yaw;
+    if (isSpectator && !spectator.followVehicle) {
+      // Free-Cam 3D Drone Spectator Camera
+      this.camera.position.set(spectator.x, spectator.altitude, spectator.z);
+      const cosP = Math.cos(spectator.pitch);
+      const lookX = spectator.x + Math.cos(spectator.yaw) * cosP * 40;
+      const lookY = spectator.altitude - Math.sin(spectator.pitch) * 40;
+      const lookZ = spectator.z + Math.sin(spectator.yaw) * cosP * 40;
+      this.camera.lookAt(lookX, lookY, lookZ);
+    } else {
+      // Orbit / Chase Camera (used for AI Vehicle Follow in Spectator Mode or Player in Play Mode)
+      const dist = cameraState.distance;
+      const pitch = cameraState.pitch;
+      const yaw = cameraState.yaw;
 
-    const horiz = dist * Math.cos(pitch);
-    const camX = cameraState.targetX - Math.cos(yaw) * horiz;
-    const camY = Math.max(1.5, dist * Math.sin(pitch));
-    const camZ = cameraState.targetZ - Math.sin(yaw) * horiz;
+      const horiz = dist * Math.cos(pitch);
+      const camX = cameraState.targetX - Math.cos(yaw) * horiz;
+      const camY = Math.max(1.5, dist * Math.sin(pitch));
+      const camZ = cameraState.targetZ - Math.sin(yaw) * horiz;
 
-    this.camera.position.set(camX, camY, camZ);
-    this.camera.lookAt(cameraState.targetX, 1.35, cameraState.targetZ);
+      this.camera.position.set(camX, camY, camZ);
+      this.camera.lookAt(cameraState.targetX, 1.35, cameraState.targetZ);
+    }
 
     this.renderer.render(this.scene, this.camera);
   }
 
-  renderMinimap(minimapCtx, player, vehicles) {
-    // Throttle 2D minimap redraws to every 3rd frame (~20 FPS) to keep 3D frame times fast
+  renderMinimap(minimapCtx, player, vehicles, spectator = null) {
     this._minimapFrame = (this._minimapFrame + 1) % 3;
     if (this._minimapFrame !== 0) return;
 
@@ -937,7 +957,6 @@ export class City3DRenderer {
     });
     minimapCtx.stroke();
 
-    // Render functional building blips on the radar (Safehouse, Workshop, Clinic, Station)
     if (this.functionalBuildings) {
       for (const z of this.functionalBuildings.zones) {
         minimapCtx.fillStyle = `#${z.color.toString(16).padStart(6, "0")}`;
@@ -950,6 +969,32 @@ export class City3DRenderer {
     for (const v of vehicles) {
       minimapCtx.fillStyle = v.id === "police" ? "#3b82f6" : "#9ca3af";
       minimapCtx.fillRect(v.x * sx - 1.5, v.y * sy - 1.5, 3, 3);
+    }
+
+    if (spectator && spectator.active) {
+      const target = spectator.followVehicle;
+      const mx = (target ? target.x : spectator.x) * sx;
+      const my = (target ? target.y : spectator.z) * sy;
+      const yaw = target ? target.angle : spectator.yaw;
+
+      // Spectator FOV cone
+      minimapCtx.save();
+      minimapCtx.translate(mx, my);
+      minimapCtx.rotate(yaw);
+      minimapCtx.beginPath();
+      minimapCtx.moveTo(0, 0);
+      minimapCtx.arc(0, 0, 18, -0.45, 0.45);
+      minimapCtx.closePath();
+      minimapCtx.fillStyle = "rgba(56, 189, 248, 0.25)";
+      minimapCtx.fill();
+
+      // Drone reticle dot
+      minimapCtx.beginPath();
+      minimapCtx.arc(0, 0, 3.6, 0, Math.PI * 2);
+      minimapCtx.fillStyle = "#38bdf8";
+      minimapCtx.fill();
+      minimapCtx.restore();
+      return;
     }
 
     minimapCtx.save();
