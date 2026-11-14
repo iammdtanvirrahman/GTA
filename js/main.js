@@ -22,11 +22,11 @@ const colliders = buildStaticColliders(urbanLayout.blocks);
 const player = new Player(MAP_CONFIG.spawn.x, MAP_CONFIG.spawn.y);
 const vehicles = spawnTejgaonTraffic();
 
-// 3D Camera Modes: 0 = Chase 3D, 1 = Classic Top-Down 3D, 2 = Low Street View
+// Real-life 1:1 metric camera distances (in meters)
 const CAM_MODES = [
-  { name: "CHASE 3D", distance: 260, pitch: 0.62, autoAlign: true },
-  { name: "TOP-DOWN 3D", distance: 520, pitch: 1.32, autoAlign: false },
-  { name: "STREET VIEW", distance: 135, pitch: 0.34, autoAlign: true }
+  { name: "CHASE 3D", distance: 18, pitch: 0.42, autoAlign: true },
+  { name: "STREET VIEW", distance: 7.5, pitch: 0.24, autoAlign: true },
+  { name: "TOP-DOWN 3D", distance: 68, pitch: 1.32, autoAlign: false }
 ];
 let camModeIdx = 0;
 
@@ -79,9 +79,9 @@ window.addEventListener("keydown", (e) => {
   keys.add(k);
 
   if (k === "=" || k === "+") {
-    cameraState.distance = Math.max(85, cameraState.distance - 30);
+    cameraState.distance = Math.max(4, cameraState.distance - 3);
   } else if (k === "-" || k === "_") {
-    cameraState.distance = Math.min(950, cameraState.distance + 30);
+    cameraState.distance = Math.min(260, cameraState.distance + 3);
   }
 });
 
@@ -89,18 +89,17 @@ window.addEventListener("keyup", (e) => {
   keys.delete(e.key.toLowerCase());
 });
 
-// Mouse wheel zoom
+// Mouse wheel zoom (4m close-up up to 260m aerial view)
 canvas.addEventListener(
   "wheel",
   (e) => {
     e.preventDefault();
-    const factor = e.deltaY > 0 ? 1.1 : 0.9;
-    cameraState.distance = Math.max(85, Math.min(950, cameraState.distance * factor));
+    const factor = e.deltaY > 0 ? 1.12 : 0.89;
+    cameraState.distance = Math.max(4, Math.min(260, cameraState.distance * factor));
   },
   { passive: false }
 );
 
-// Right-click or left-drag camera orbit around player/vehicle
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 canvas.addEventListener("mousedown", (e) => {
   if (e.button === 2 || e.button === 0 || e.button === 1) {
@@ -115,7 +114,7 @@ window.addEventListener("mousemove", (e) => {
   const dx = e.clientX - dragStart.x;
   const dy = e.clientY - dragStart.y;
   cameraState.yaw += dx * 0.0065;
-  cameraState.pitch = Math.max(0.18, Math.min(1.45, cameraState.pitch + dy * 0.005));
+  cameraState.pitch = Math.max(0.12, Math.min(1.45, cameraState.pitch + dy * 0.005));
   dragStart = { x: e.clientX, y: e.clientY };
 });
 
@@ -173,7 +172,6 @@ function gatherInput() {
   if (keys.has("a") || keys.has("arrowleft")) rawX -= 1;
   if (keys.has("d") || keys.has("arrowright")) rawX += 1;
 
-  // When driving, A/D always steers vehicle left/right and W/S throttles/reverses.
   if (player.inVehicle) {
     return {
       moveX: rawX,
@@ -182,7 +180,6 @@ function gatherInput() {
     };
   }
 
-  // On foot: map movement relative to camera yaw so W always walks forward into the 3D scene
   if (rawX === 0 && rawY === 0) {
     return { moveX: 0, moveY: 0, sprint: keys.has("shift") || mobileSprint };
   }
@@ -211,7 +208,8 @@ function updateHUD() {
   staminaBar.style.width = `${(player.stamina / player.maxStamina) * 100}%`;
 
   if (player.inVehicle) {
-    const kmh = Math.round(Math.abs(player.inVehicle.speed) * 0.22);
+    // True metric conversion: 1 m/s = 3.6 km/h
+    const kmh = Math.round(Math.abs(player.inVehicle.speed) * 3.6);
     speedLabel.textContent = `${kmh} KM/H`;
     vehicleStatus.textContent = `DRIVING: ${player.inVehicle.name}`;
     vehicleStatus.classList.add("driving");
@@ -251,13 +249,11 @@ function loop(now) {
   player.update(dt, input, colliders);
   resolveEntityCollisions(player, vehicles);
 
-  // Smoothly follow player/vehicle in 3D space
   const leadX = player.inVehicle ? player.inVehicle.vx * 0.16 : 0;
   const leadZ = player.inVehicle ? player.inVehicle.vy * 0.16 : 0;
-  cameraState.targetX += (player.x + leadX - cameraState.targetX) * 9 * dt;
-  cameraState.targetZ += (player.y + leadZ - cameraState.targetZ) * 9 * dt;
+  cameraState.targetX += (player.x + leadX - cameraState.targetX) * 10 * dt;
+  cameraState.targetZ += (player.y + leadZ - cameraState.targetZ) * 10 * dt;
 
-  // Auto-align camera behind vehicle when driving in Chase/Street mode
   const preset = CAM_MODES[camModeIdx];
   if (preset.autoAlign && player.inVehicle && !isOrbiting && !cameraState.manualOrbit) {
     let diff = player.inVehicle.angle - cameraState.yaw;

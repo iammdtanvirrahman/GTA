@@ -9,8 +9,10 @@ import {
 } from "./tejgaonMapData.js";
 
 /**
- * Deterministic generator for Tejgaon industrial sheds, apartments, and greenery.
- * Keeps the exact coordinates shared with physics.js so 3D meshes match 2D AABBs 1:1.
+ * Generates deterministic 1:1 metric urban blocks & trees in Tejgaon (1 unit = 1 meter):
+ *   - Industrial tin-sheds & godowns: 14m–28m footprints, 5m–9m tall
+ *   - Dhaka mid-rise apartments/offices: 16m–30m footprints, 12m–28m tall (4 to 9 stories)
+ *   - Roadside trees: 0.25m trunk radius, 2.5m–5.5m canopy radius, 6m–11m height
  */
 export function generateUrbanLayout() {
   const blocks = [];
@@ -21,39 +23,39 @@ export function generateUrbanLayout() {
     return (seed - 1) / 2147483646;
   };
 
-  for (let gx = 160; gx < MAP_CONFIG.width - 180; gx += 135) {
-    for (let gy = 140; gy < MAP_CONFIG.height - 160; gy += 135) {
-      if (rand() < 0.28) continue;
+  for (let gx = 65; gx < MAP_CONFIG.width - 75; gx += 46) {
+    for (let gy = 65; gy < MAP_CONFIG.height - 75; gy += 46) {
+      if (rand() < 0.24) continue;
 
-      const bx = gx + (rand() - 0.5) * 24;
-      const by = gy + (rand() - 0.5) * 24;
-      const bw = 55 + rand() * 52;
-      const bh = 50 + rand() * 52;
+      const bx = gx + (rand() - 0.5) * 8;
+      const by = gy + (rand() - 0.5) * 8;
+      const bw = 16 + rand() * 18;
+      const bh = 15 + rand() * 18;
 
-      if (isNearRoadOrWater(bx + bw / 2, by + bh / 2, 72)) continue;
+      if (isNearRoadOrWater(bx + bw / 2, by + bh / 2, 24)) continue;
 
       const palette = [0x3b4252, 0x434c5e, 0x4c566a, 0x5c4738, 0x3b4d47, 0x523f49];
-      const isWarehouse = rand() > 0.55;
+      const isWarehouse = rand() > 0.52;
       blocks.push({
         x: bx,
         y: by,
         w: bw,
         h: bh,
-        height: isWarehouse ? 26 + rand() * 24 : 52 + rand() * 88,
+        height: isWarehouse ? 5.5 + rand() * 4.5 : 12 + rand() * 18,
         color: palette[Math.floor(rand() * palette.length)],
-        hasWaterTank: !isWarehouse && rand() > 0.35
+        hasWaterTank: !isWarehouse && rand() > 0.32
       });
     }
   }
 
-  for (let i = 0; i < 420; i++) {
-    const tx = 100 + rand() * (MAP_CONFIG.width - 200);
-    const ty = 100 + rand() * (MAP_CONFIG.height - 200);
-    if (isNearRoadOrWater(tx, ty, 48)) continue;
+  for (let i = 0; i < 620; i++) {
+    const tx = 45 + rand() * (MAP_CONFIG.width - 90);
+    const ty = 45 + rand() * (MAP_CONFIG.height - 90);
+    if (isNearRoadOrWater(tx, ty, 16)) continue;
     trees.push({
       x: tx,
       y: ty,
-      r: 12 + rand() * 13
+      r: 2.6 + rand() * 2.6
     });
   }
 
@@ -81,18 +83,16 @@ function isNearRoadOrWater(x, y, margin) {
   for (let i = 0; i < RAILWAY_LINE.points.length - 1; i++) {
     const p1 = RAILWAY_LINE.points[i];
     const p2 = RAILWAY_LINE.points[i + 1];
-    if (distToSegment(x, y, p1.x, p1.y, p2.x, p2.y) < 42 + margin) {
+    if (distToSegment(x, y, p1.x, p1.y, p2.x, p2.y) < 12 + margin) {
       return true;
     }
   }
-  if (x > 2820 && y > 1050 && y < 2900) return true;
-  if (x > 420 && x < 1780 && y > 280 && y < 1850) return true;
+  // Keep Hatirjheel basin & Old Airport runway strip clear
+  if (x > 1710 && y > 680 && y < 1860) return true;
+  if (x > 260 && x < 1080 && y > 130 && y < 1260) return true;
   return false;
 }
 
-/**
- * Creates a crisp canvas texture for 3D building signs & landmark roofs
- */
 function makeSignTexture(text, bg = "#0d1117", fg = "#f59e0b", border = "#f59e0b") {
   const c = document.createElement("canvas");
   c.width = 512;
@@ -106,7 +106,7 @@ function makeSignTexture(text, bg = "#0d1117", fg = "#f59e0b", border = "#f59e0b
   g.strokeRect(6, 6, c.width - 12, c.height - 12);
 
   g.fillStyle = fg;
-  g.font = "bold 34px Consolas, monospace";
+  g.font = "bold 32px Consolas, monospace";
   g.textAlign = "center";
   g.textBaseline = "middle";
   g.fillText(text, c.width / 2, c.height / 2);
@@ -133,15 +133,15 @@ export class City3DRenderer {
     this.renderer.toneMappingExposure = 1.08;
 
     this.scene = new THREE.Scene();
-    // 1990s Dhaka late-afternoon warm golden haze
     this.scene.background = new THREE.Color(0x161d29);
-    this.scene.fog = new THREE.FogExp2(0x1a2230, 0.00042);
+    this.scene.fog = new THREE.FogExp2(0x1a2230, 0.0011);
 
+    // Near clipping plane = 0.25m so close human-eye camera views never clip
     this.camera = new THREE.PerspectiveCamera(
-      52,
+      54,
       window.innerWidth / window.innerHeight,
-      5,
-      6500
+      0.25,
+      2800
     );
 
     this.vehicleMeshes = new Map();
@@ -166,28 +166,27 @@ export class City3DRenderer {
   }
 
   setupLights() {
-    const hemi = new THREE.HemisphereLight(0x93c5fd, 0x292524, 0.85);
+    const hemi = new THREE.HemisphereLight(0x93c5fd, 0x292524, 0.9);
     this.scene.add(hemi);
 
     const sun = new THREE.DirectionalLight(0xffedd5, 1.95);
-    sun.position.set(1400, 1900, 1200);
+    sun.position.set(450, 620, 380);
     sun.castShadow = true;
     sun.shadow.mapSize.width = 2048;
     sun.shadow.mapSize.height = 2048;
-    sun.shadow.camera.near = 200;
-    sun.shadow.camera.far = 5200;
-    const d = 2200;
+    sun.shadow.camera.near = 20;
+    sun.shadow.camera.far = 1800;
+    const d = 320;
     sun.shadow.camera.left = -d;
     sun.shadow.camera.right = d;
     sun.shadow.camera.top = d;
     sun.shadow.camera.bottom = -d;
-    sun.shadow.bias = -0.0005;
+    sun.shadow.bias = -0.0004;
     this.scene.add(sun);
     this.sunLight = sun;
   }
 
   buildTerrainAndZones() {
-    // Ground plane (World X = map X, World Y = elevation, World Z = map Y)
     const groundGeo = new THREE.PlaneGeometry(MAP_CONFIG.width, MAP_CONFIG.height);
     const groundMat = new THREE.MeshStandardMaterial({
       color: 0x222831,
@@ -200,7 +199,6 @@ export class City3DRenderer {
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    // Distinct district ground pads
     for (const z of ZONES) {
       const colors = {
         airfield: 0x233329,
@@ -215,15 +213,15 @@ export class City3DRenderer {
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = -Math.PI / 2;
-      mesh.position.set(z.x + z.w / 2, 0.25, z.y + z.h / 2);
+      mesh.position.set(z.x + z.w / 2, 0.03, z.y + z.h / 2);
       mesh.receiveShadow = true;
       this.scene.add(mesh);
     }
 
-    // Perimeter wall border
+    // Perimeter boundary wall (3.2m high)
     const wallMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.6 });
-    const h = 22;
-    const t = 14;
+    const h = 3.2;
+    const t = 1.5;
     const borders = [
       [MAP_CONFIG.width, h, t, MAP_CONFIG.width / 2, h / 2, 0],
       [MAP_CONFIG.width, h, t, MAP_CONFIG.width / 2, h / 2, MAP_CONFIG.height],
@@ -241,7 +239,6 @@ export class City3DRenderer {
     for (const water of WATER_BODIES) {
       const shape = new THREE.Shape();
       water.points.forEach((pt, idx) => {
-        // Shape X -> world X, Shape Y -> -world Z after rotateX(-PI/2)
         if (idx === 0) shape.moveTo(pt.x, -pt.y);
         else shape.lineTo(pt.x, -pt.y);
       });
@@ -257,13 +254,12 @@ export class City3DRenderer {
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = -Math.PI / 2;
-      mesh.position.y = 0.45;
+      mesh.position.y = 0.06;
       mesh.receiveShadow = true;
       this.scene.add(mesh);
       this.waterMeshes.push(mesh);
 
-      // Hatirjheel promenade embankment wall
-      const linePts = water.points.map((p) => new THREE.Vector3(p.x, 2.2, p.y));
+      const linePts = water.points.map((p) => new THREE.Vector3(p.x, 0.65, p.y));
       linePts.push(linePts[0].clone());
       const curbGeo = new THREE.BufferGeometry().setFromPoints(linePts);
       const curbMat = new THREE.LineBasicMaterial({ color: 0x64748b });
@@ -280,83 +276,89 @@ export class City3DRenderer {
     const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
 
     for (const road of ROADS) {
+      const sidewalkMargin = road.type === "arterial" ? 4.4 : 2.6;
+
       for (let i = 0; i < road.points.length - 1; i++) {
         const p1 = road.points[i];
         const p2 = road.points[i + 1];
         const dx = p2.x - p1.x;
         const dz = p2.y - p1.y;
         const len = Math.hypot(dx, dz);
-        if (len < 1) continue;
+        if (len < 0.5) continue;
 
         const angle = Math.atan2(dz, dx);
         const mx = (p1.x + p2.x) / 2;
         const mz = (p1.y + p2.y) / 2;
 
-        // Raised sidewalk curb base
+        // Raised Dhaka footpath (0.18m curb height)
         const curbMesh = new THREE.Mesh(
-          new THREE.BoxGeometry(len + road.width * 0.6, 1.2, road.width + 12),
+          new THREE.BoxGeometry(len + road.width * 0.5, 0.18, road.width + sidewalkMargin),
           sidewalkMat
         );
-        curbMesh.position.set(mx, 0.6, mz);
+        curbMesh.position.set(mx, 0.09, mz);
         curbMesh.rotation.y = -angle;
         curbMesh.receiveShadow = true;
         this.scene.add(curbMesh);
 
         // Asphalt surface
         const roadMesh = new THREE.Mesh(
-          new THREE.BoxGeometry(len + road.width * 0.4, 1.5, road.width),
+          new THREE.BoxGeometry(len + road.width * 0.35, 0.22, road.width),
           asphaltMat
         );
-        roadMesh.position.set(mx, 0.75, mz);
+        roadMesh.position.set(mx, 0.11, mz);
         roadMesh.rotation.y = -angle;
         roadMesh.receiveShadow = true;
         this.scene.add(roadMesh);
 
-        // Dashed lane markings
-        const dashStep = 44;
+        // Real-life 3.0m dashed lane lines (0.15m wide)
+        const dashStep = 9.0;
         const dashCount = Math.floor(len / dashStep);
         const dashMat = road.lanes === 4 ? yellowLineMat : whiteLineMat;
         for (let d = 0; d < dashCount; d++) {
           const t = (d + 0.5) / dashCount;
           const lx = p1.x + dx * t;
           const lz = p1.y + dz * t;
-          const dash = new THREE.Mesh(new THREE.PlaneGeometry(20, 2.4), dashMat);
+          const dash = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.16), dashMat);
           dash.rotation.x = -Math.PI / 2;
           dash.rotation.z = -angle;
-          dash.position.set(lx, 1.58, lz);
+          dash.position.set(lx, 0.23, lz);
           this.scene.add(dash);
         }
 
-        // 3D Streetlamps along arterial roads
-        if (road.type === "arterial" && len > 240) {
-          const lampStep = 260;
+        // Real-life 8.5m streetlamps spaced every 38m along arterial roads
+        if (road.type === "arterial" && len > 50) {
+          const lampStep = 38;
           const lamps = Math.floor(len / lampStep);
           const nx = -dz / len;
           const nz = dx / len;
           for (let l = 1; l < lamps; l++) {
             const t = l / lamps;
             const side = l % 2 === 0 ? 1 : -1;
-            const sx = p1.x + dx * t + nx * (road.width / 2 + 5) * side;
-            const sz = p1.y + dz * t + nz * (road.width / 2 + 5) * side;
+            const offsetDist = road.width / 2 + 1.1;
+            const sx = p1.x + dx * t + nx * offsetDist * side;
+            const sz = p1.y + dz * t + nz * offsetDist * side;
 
-            const pole = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.5, 44, 6), poleMat);
-            pole.position.set(sx, 22, sz);
+            const pole = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.11, 0.16, 8.5, 6),
+              poleMat
+            );
+            pole.position.set(sx, 4.25, sz);
             this.scene.add(pole);
 
-            const arm = new THREE.Mesh(new THREE.BoxGeometry(10, 1.2, 1.2), poleMat);
-            arm.position.set(sx - nx * 4 * side, 43.5, sz - nz * 4 * side);
+            const arm = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.12), poleMat);
+            arm.position.set(sx - nx * 0.9 * side, 8.4, sz - nz * 0.9 * side);
             arm.rotation.y = -angle;
             this.scene.add(arm);
 
-            const lamp = new THREE.Mesh(new THREE.BoxGeometry(4, 1.5, 2.5), bulbMat);
-            lamp.position.set(sx - nx * 8 * side, 42.8, sz - nz * 8 * side);
+            const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.18, 0.32), bulbMat);
+            lamp.position.set(sx - nx * 1.8 * side, 8.3, sz - nz * 1.8 * side);
             this.scene.add(lamp);
           }
         }
       }
     }
 
-    // Dual-Gauge Tejgaon Railway Track
+    // Real-life Bangladesh Railway Broad-Gauge Track (1.676m rail gauge, 2.75m sleepers)
     const ballastMat = new THREE.MeshStandardMaterial({ color: 0x443b32, roughness: 0.95 });
     const sleeperMat = new THREE.MeshStandardMaterial({ color: 0x261e18, roughness: 0.9 });
     const railMat = new THREE.MeshStandardMaterial({
@@ -376,28 +378,27 @@ export class City3DRenderer {
       const mx = (p1.x + p2.x) / 2;
       const mz = (p1.y + p2.y) / 2;
 
-      const ballast = new THREE.Mesh(new THREE.BoxGeometry(len, 1.8, 28), ballastMat);
-      ballast.position.set(mx, 0.9, mz);
+      const ballast = new THREE.Mesh(new THREE.BoxGeometry(len, 0.35, 5.2), ballastMat);
+      ballast.position.set(mx, 0.175, mz);
       ballast.rotation.y = -angle;
       ballast.receiveShadow = true;
       this.scene.add(ballast);
 
-      // Wooden sleepers
-      const sleepers = Math.floor(len / 14);
+      const sleepers = Math.floor(len / 0.85);
       for (let s = 0; s < sleepers; s++) {
         const t = s / sleepers;
-        const sl = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 22), sleeperMat);
-        sl.position.set(p1.x + dx * t, 2.1, p1.y + dz * t);
+        const sl = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 2.75), sleeperMat);
+        sl.position.set(p1.x + dx * t, 0.4, p1.y + dz * t);
         sl.rotation.y = -angle;
         this.scene.add(sl);
       }
 
-      // Left & right steel rails
-      for (const offset of [-6, 6]) {
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 1.6, 1.6), railMat);
+      // Broad-gauge 1.676m spacing (+/- 0.84m from center)
+      for (const offset of [-0.84, 0.84]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.18, 0.1), railMat);
         rail.position.set(
           mx - Math.sin(angle) * offset,
-          3.1,
+          0.55,
           mz + Math.cos(angle) * offset
         );
         rail.rotation.y = -angle;
@@ -407,14 +408,15 @@ export class City3DRenderer {
   }
 
   buildLandmarks() {
+    // True-to-life landmark heights in meters
     const landmarkStyles = {
-      hangar: { height: 68, color: 0x475569 },
-      station: { height: 48, color: 0x7c2d12 },
-      factory: { height: 74, color: 0x334155 },
-      office: { height: 148, color: 0x1e3a5f },
-      commercial: { height: 105, color: 0x581c87 },
-      civic: { height: 84, color: 0x14532d },
-      market: { height: 42, color: 0x78350f }
+      hangar: { height: 14, color: 0x475569 },
+      station: { height: 7.5, color: 0x7c2d12 },
+      factory: { height: 15, color: 0x334155 },
+      office: { height: 42, color: 0x1e3a5f }, // ~12-story WASA / Media Bhaban
+      commercial: { height: 26, color: 0x581c87 }, // ~7-story Farmgate plaza
+      civic: { height: 18, color: 0x14532d },
+      market: { height: 8.5, color: 0x78350f }
     };
 
     for (const lm of LANDMARKS) {
@@ -423,50 +425,48 @@ export class City3DRenderer {
 
       if (lm.style === "runway") {
         const tarmac = new THREE.Mesh(
-          new THREE.BoxGeometry(lm.w, 1.6, lm.h),
+          new THREE.BoxGeometry(lm.w, 0.25, lm.h),
           new THREE.MeshStandardMaterial({ color: 0x333942, roughness: 0.85 })
         );
-        tarmac.position.set(cx, 0.8, cz);
+        tarmac.position.set(cx, 0.125, cz);
         tarmac.receiveShadow = true;
         this.scene.add(tarmac);
 
-        // Runway centerline stripes
-        for (let y = lm.y + 40; y < lm.y + lm.h - 40; y += 64) {
+        for (let y = lm.y + 25; y < lm.y + lm.h - 25; y += 36) {
           const stripe = new THREE.Mesh(
-            new THREE.PlaneGeometry(5, 34),
+            new THREE.PlaneGeometry(1.6, 18),
             new THREE.MeshBasicMaterial({ color: 0xf8fafc })
           );
           stripe.rotation.x = -Math.PI / 2;
-          stripe.position.set(cx, 1.7, y);
+          stripe.position.set(cx, 0.27, y);
           this.scene.add(stripe);
         }
         continue;
       }
 
       if (lm.style === "bridge") {
-        // Elevated Hatirjheel Overpass Bridge Deck + Concrete Arch Ribs
         const deck = new THREE.Mesh(
-          new THREE.BoxGeometry(lm.w + 30, 5, lm.h),
+          new THREE.BoxGeometry(lm.w + 12, 1.2, lm.h),
           new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.7 })
         );
-        deck.position.set(cx, 6, cz);
+        deck.position.set(cx, 1.4, cz);
         deck.castShadow = true;
         deck.receiveShadow = true;
         this.scene.add(deck);
 
-        for (const zOff of [-lm.h / 2 + 6, lm.h / 2 - 6]) {
+        for (const zOff of [-lm.h / 2 + 1.2, lm.h / 2 - 1.2]) {
           const arch = new THREE.Mesh(
-            new THREE.TorusGeometry(lm.w * 0.48, 3.2, 8, 24, Math.PI),
+            new THREE.TorusGeometry(lm.w * 0.45, 0.85, 8, 24, Math.PI),
             new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.45 })
           );
-          arch.position.set(cx, 7, cz + zOff);
+          arch.position.set(cx, 1.6, cz + zOff);
           arch.castShadow = true;
           this.scene.add(arch);
         }
         continue;
       }
 
-      const spec = landmarkStyles[lm.style] || { height: 70, color: 0x374151 };
+      const spec = landmarkStyles[lm.style] || { height: 14, color: 0x374151 };
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(lm.w, spec.height, lm.h),
         new THREE.MeshStandardMaterial({ color: spec.color, roughness: 0.72 })
@@ -476,21 +476,21 @@ export class City3DRenderer {
       mesh.receiveShadow = true;
       this.scene.add(mesh);
 
-      // Golden rooftop trim
       const trim = new THREE.Mesh(
-        new THREE.BoxGeometry(lm.w + 4, 4, lm.h + 4),
+        new THREE.BoxGeometry(lm.w + 0.8, 0.8, lm.h + 0.8),
         new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.5 })
       );
-      trim.position.set(cx, spec.height + 2, cz);
+      trim.position.set(cx, spec.height + 0.4, cz);
       this.scene.add(trim);
 
-      // Rooftop Landmark Signboard
       const tex = makeSignTexture(lm.name);
+      const signW = Math.min(lm.w * 0.85, 32);
+      const signH = signW * 0.25;
       const signMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(Math.min(lm.w * 0.92, 190), 42),
+        new THREE.PlaneGeometry(signW, signH),
         new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })
       );
-      signMesh.position.set(cx, spec.height + 26, cz);
+      signMesh.position.set(cx, spec.height + signH * 0.65, cz);
       this.scene.add(signMesh);
     }
   }
@@ -516,18 +516,18 @@ export class City3DRenderer {
       mesh.receiveShadow = true;
       this.scene.add(mesh);
 
-      // Rooftop parapet ledge
+      // 0.9m rooftop parapet wall
       const roof = new THREE.Mesh(
-        new THREE.BoxGeometry(b.w + 2, 3, b.h + 2),
+        new THREE.BoxGeometry(b.w + 0.4, 0.9, b.h + 0.4),
         parapetMat
       );
-      roof.position.set(cx, b.height + 1.5, cz);
+      roof.position.set(cx, b.height + 0.45, cz);
       this.scene.add(roof);
 
-      // Classic Dhaka blue plastic rooftop water tank (Gazi Tank style)
+      // Realistic 1,500L rooftop water tank (1.2m diameter x 1.5m tall)
       if (b.hasWaterTank) {
-        const tank = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 11, 10), tankMat);
-        tank.position.set(cx + b.w * 0.18, b.height + 8, cz - b.h * 0.15);
+        const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.5, 10), tankMat);
+        tank.position.set(cx + b.w * 0.2, b.height + 1.55, cz - b.h * 0.2);
         tank.castShadow = true;
         this.scene.add(tank);
       }
@@ -544,15 +544,15 @@ export class City3DRenderer {
       group.position.set(t.x, 0, t.y);
 
       const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(2.2, 3.4, 22, 6),
+        new THREE.CylinderGeometry(0.22, 0.35, 3.6, 6),
         trunkMat
       );
-      trunk.position.y = 11;
+      trunk.position.y = 1.8;
       trunk.castShadow = true;
       group.add(trunk);
 
       const crown1 = new THREE.Mesh(new THREE.DodecahedronGeometry(t.r, 1), leafMat1);
-      crown1.position.y = 26;
+      crown1.position.y = 4.6;
       crown1.castShadow = true;
       group.add(crown1);
 
@@ -560,13 +560,16 @@ export class City3DRenderer {
         new THREE.DodecahedronGeometry(t.r * 0.72, 1),
         leafMat2
       );
-      crown2.position.set(3, 34, -2);
+      crown2.position.set(0.7, 6.1, -0.5);
       group.add(crown2);
 
       this.scene.add(group);
     }
   }
 
+  /**
+   * 1:1 Realistic Human Proportions (1.72m tall, 0.46m shoulder width)
+   */
   buildPlayerMesh() {
     const group = new THREE.Group();
 
@@ -575,42 +578,42 @@ export class City3DRenderer {
     const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
     const hairMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.85 });
 
-    // Legs
-    this.leftLeg = new THREE.Mesh(new THREE.BoxGeometry(4.2, 11, 4.2), pantsMat);
-    this.leftLeg.position.set(0, 5.5, -3);
+    // Legs (0.82m inseam)
+    this.leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.82, 0.16), pantsMat);
+    this.leftLeg.position.set(0, 0.41, -0.11);
     this.leftLeg.castShadow = true;
     group.add(this.leftLeg);
 
-    this.rightLeg = new THREE.Mesh(new THREE.BoxGeometry(4.2, 11, 4.2), pantsMat);
-    this.rightLeg.position.set(0, 5.5, 3);
+    this.rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.82, 0.16), pantsMat);
+    this.rightLeg.position.set(0, 0.41, 0.11);
     this.rightLeg.castShadow = true;
     group.add(this.rightLeg);
 
-    // 90s Denim Jacket Torso (+X is forward heading)
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(8, 12, 12), jacketMat);
-    torso.position.set(0, 16.5, 0);
+    // Torso (0.58m tall, 0.44m wide)
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.58, 0.44), jacketMat);
+    torso.position.set(0, 1.11, 0);
     torso.castShadow = true;
     group.add(torso);
 
-    // Arms
-    this.leftArm = new THREE.Mesh(new THREE.BoxGeometry(3.6, 10, 3.6), jacketMat);
-    this.leftArm.position.set(0, 16.5, -8);
+    // Arms (0.56m long)
+    this.leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.56, 0.13), jacketMat);
+    this.leftArm.position.set(0, 1.1, -0.29);
     this.leftArm.castShadow = true;
     group.add(this.leftArm);
 
-    this.rightArm = new THREE.Mesh(new THREE.BoxGeometry(3.6, 10, 3.6), jacketMat);
-    this.rightArm.position.set(0, 16.5, 8);
+    this.rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.56, 0.13), jacketMat);
+    this.rightArm.position.set(0, 1.1, 0.29);
     this.rightArm.castShadow = true;
     group.add(this.rightArm);
 
-    // Head + Hair
-    const head = new THREE.Mesh(new THREE.BoxGeometry(7.2, 7.5, 7.2), skinMat);
-    head.position.set(0.5, 26.5, 0);
+    // Head (0.24m tall) + Hair -> Total height = 1.72m
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.21), skinMat);
+    head.position.set(0.02, 1.54, 0);
     head.castShadow = true;
     group.add(head);
 
-    const hair = new THREE.Mesh(new THREE.BoxGeometry(7.6, 3.2, 7.6), hairMat);
-    hair.position.set(0.2, 29.5, 0);
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.09, 0.23), hairMat);
+    hair.position.set(0.01, 1.65, 0);
     group.add(hair);
 
     this.playerMesh = group;
@@ -618,18 +621,21 @@ export class City3DRenderer {
   }
 
   buildHijackRing() {
-    const geo = new THREE.RingGeometry(24, 28, 32);
+    const geo = new THREE.RingGeometry(2.1, 2.45, 32);
     const mat = new THREE.MeshBasicMaterial({
       color: 0xf59e0b,
       side: THREE.DoubleSide
     });
     this.hijackRing = new THREE.Mesh(geo, mat);
     this.hijackRing.rotation.x = -Math.PI / 2;
-    this.hijackRing.position.y = 2.1;
+    this.hijackRing.position.y = 0.28;
     this.hijackRing.visible = false;
     this.scene.add(this.hijackRing);
   }
 
+  /**
+   * 1:1 Realistic Vehicle Proportions (in meters)
+   */
   createVehicle3D(v) {
     const group = new THREE.Group();
     const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
@@ -642,150 +648,165 @@ export class City3DRenderer {
     const roofMat = new THREE.MeshStandardMaterial({ color: v.roofColor, roughness: 0.55 });
     const trimMat = new THREE.MeshStandardMaterial({ color: v.trimColor, roughness: 0.5 });
 
-    // Wheels (+X is forward, Z is width)
+    const wheelRadius = v.id === "brtc" ? 0.52 : v.id === "rickshaw" ? 0.36 : 0.32;
+    const wheelWidth = v.id === "brtc" ? 0.28 : v.id === "rickshaw" ? 0.08 : 0.2;
+
     const wheelPositions =
       v.id === "mishuk" || v.id === "rickshaw"
         ? [
-            [v.length * 0.34, 4, 0],
-            [-v.length * 0.32, 4, -v.width * 0.48],
-            [-v.length * 0.32, 4, v.width * 0.48]
+            [v.length * 0.36, wheelRadius, 0],
+            [-v.length * 0.32, wheelRadius, -v.width * 0.48],
+            [-v.length * 0.32, wheelRadius, v.width * 0.48]
           ]
         : [
-            [v.length * 0.3, 4.5, -v.width * 0.48],
-            [v.length * 0.3, 4.5, v.width * 0.48],
-            [-v.length * 0.3, 4.5, -v.width * 0.48],
-            [-v.length * 0.3, 4.5, v.width * 0.48]
+            [v.length * 0.31, wheelRadius, -v.width * 0.48],
+            [v.length * 0.31, wheelRadius, v.width * 0.48],
+            [-v.length * 0.31, wheelRadius, -v.width * 0.48],
+            [-v.length * 0.31, wheelRadius, v.width * 0.48]
           ];
 
     for (const [wx, wy, wz] of wheelPositions) {
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, 3, 12), wheelMat);
+      const wheel = new THREE.Mesh(
+        new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelWidth, 14),
+        wheelMat
+      );
       wheel.rotation.x = Math.PI / 2;
       wheel.position.set(wx, wy, wz);
       group.add(wheel);
     }
 
     if (v.id === "brtc") {
-      // Tall Red BRTC Double-Decker Bus
+      // Real 4.35m tall BRTC Double-Decker Bus
       const lowerDeck = new THREE.Mesh(
-        new THREE.BoxGeometry(v.length, 14, v.width),
+        new THREE.BoxGeometry(v.length, 1.85, v.width),
         bodyMat
       );
-      lowerDeck.position.y = 11;
+      lowerDeck.position.y = 1.35;
       lowerDeck.castShadow = true;
       group.add(lowerDeck);
 
       const stripe = new THREE.Mesh(
-        new THREE.BoxGeometry(v.length + 0.6, 2.5, v.width + 0.6),
+        new THREE.BoxGeometry(v.length + 0.04, 0.22, v.width + 0.04),
         trimMat
       );
-      stripe.position.y = 18.5;
+      stripe.position.y = 2.35;
       group.add(stripe);
 
       const upperDeck = new THREE.Mesh(
-        new THREE.BoxGeometry(v.length - 2, 13, v.width - 1),
+        new THREE.BoxGeometry(v.length - 0.15, 1.8, v.width - 0.08),
         roofMat
       );
-      upperDeck.position.y = 26;
+      upperDeck.position.y = 3.35;
       upperDeck.castShadow = true;
       group.add(upperDeck);
 
       const windshield = new THREE.Mesh(
-        new THREE.BoxGeometry(1.5, 9, v.width - 4),
+        new THREE.BoxGeometry(0.12, 1.15, v.width - 0.3),
         glassMat
       );
-      windshield.position.set(v.length / 2, 24, 0);
+      windshield.position.set(v.length / 2, 3.25, 0);
       group.add(windshield);
     } else if (v.id === "mishuk") {
-      // Iconic Green & Yellow 3-Wheeler Baby Taxi
+      // Real 2.65m x 1.35m x 1.68m Mishuk Baby Taxi
       const chassis = new THREE.Mesh(
-        new THREE.BoxGeometry(v.length * 0.85, 7, v.width),
+        new THREE.BoxGeometry(v.length * 0.86, 0.62, v.width),
         bodyMat
       );
-      chassis.position.set(-2, 7.5, 0);
+      chassis.position.set(-0.15, 0.58, 0);
       chassis.castShadow = true;
       group.add(chassis);
 
       const canopy = new THREE.Mesh(
-        new THREE.BoxGeometry(v.length * 0.62, 11, v.width - 1),
+        new THREE.BoxGeometry(v.length * 0.62, 0.82, v.width - 0.06),
         roofMat
       );
-      canopy.position.set(-4, 15.5, 0);
+      canopy.position.set(-0.32, 1.26, 0);
       canopy.castShadow = true;
       group.add(canopy);
     } else if (v.id === "rickshaw") {
-      // Dhaka Cycle Rickshaw + Colorful Hood + Puller
+      // Real 2.35m x 1.15m x 1.78m Cycle Rickshaw + Puller (1.68m standing/pedaling)
       const carriage = new THREE.Mesh(
-        new THREE.BoxGeometry(v.length * 0.55, 7, v.width),
+        new THREE.BoxGeometry(v.length * 0.52, 0.55, v.width),
         bodyMat
       );
-      carriage.position.set(-6, 7.5, 0);
+      carriage.position.set(-0.5, 0.62, 0);
       carriage.castShadow = true;
       group.add(carriage);
 
       const hood = new THREE.Mesh(
-        new THREE.BoxGeometry(v.length * 0.42, 11, v.width),
+        new THREE.BoxGeometry(v.length * 0.42, 0.86, v.width),
         roofMat
       );
-      hood.position.set(-8, 15.5, 0);
+      hood.position.set(-0.65, 1.32, 0);
       hood.castShadow = true;
       group.add(hood);
 
-      const puller = new THREE.Mesh(
-        new THREE.BoxGeometry(6, 12, 7),
+      const pullerBody = new THREE.Mesh(
+        new THREE.BoxGeometry(0.28, 0.72, 0.38),
         new THREE.MeshStandardMaterial({ color: 0xf59e0b })
       );
-      puller.position.set(8, 11, 0);
-      group.add(puller);
+      pullerBody.position.set(0.45, 1.05, 0);
+      group.add(pullerBody);
+
+      const pullerHead = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.22, 0.2),
+        new THREE.MeshStandardMaterial({ color: 0xd99b66 })
+      );
+      pullerHead.position.set(0.48, 1.54, 0);
+      group.add(pullerHead);
     } else {
-      // '92 Toyota Corolla DX & DMP Police Jeep
+      // Real '92 Toyota Corolla DX (1.38m H) & DMP Patrol Jeep (1.88m H)
+      const lowerH = v.id === "police" ? 0.85 : 0.62;
+      const cabinH = v.id === "police" ? 0.72 : 0.52;
+
       const lowerBody = new THREE.Mesh(
-        new THREE.BoxGeometry(v.length, 8.5, v.width),
+        new THREE.BoxGeometry(v.length, lowerH, v.width),
         bodyMat
       );
-      lowerBody.position.y = 8;
+      lowerBody.position.y = 0.28 + lowerH / 2;
       lowerBody.castShadow = true;
       group.add(lowerBody);
 
       const cabin = new THREE.Mesh(
-        new THREE.BoxGeometry(v.length * 0.56, 7.5, v.width - 2.5),
+        new THREE.BoxGeometry(v.length * 0.58, cabinH, v.width - 0.18),
         roofMat
       );
-      cabin.position.set(-2, 15.5, 0);
+      cabin.position.set(-0.18, 0.28 + lowerH + cabinH / 2 - 0.04, 0);
       cabin.castShadow = true;
       group.add(cabin);
 
       const glass = new THREE.Mesh(
-        new THREE.BoxGeometry(v.length * 0.58, 5.5, v.width - 2),
+        new THREE.BoxGeometry(v.length * 0.6, cabinH * 0.74, v.width - 0.14),
         glassMat
       );
-      glass.position.set(-2, 15.2, 0);
+      glass.position.set(-0.18, 0.28 + lowerH + cabinH / 2 - 0.05, 0);
       group.add(glass);
 
-      // DMP Police Jeep flashing red/blue lightbar
       if (v.id === "police") {
+        const beaconY = 0.28 + lowerH + cabinH + 0.05;
         const redBeacon = new THREE.Mesh(
-          new THREE.BoxGeometry(3.5, 2.5, 5),
+          new THREE.BoxGeometry(0.24, 0.14, 0.36),
           new THREE.MeshBasicMaterial({ color: 0xef4444 })
         );
-        redBeacon.position.set(-2, 20.5, -3.5);
+        redBeacon.position.set(-0.18, beaconY, -0.24);
         group.add(redBeacon);
 
         const blueBeacon = new THREE.Mesh(
-          new THREE.BoxGeometry(3.5, 2.5, 5),
+          new THREE.BoxGeometry(0.24, 0.14, 0.36),
           new THREE.MeshBasicMaterial({ color: 0x3b82f6 })
         );
-        blueBeacon.position.set(-2, 20.5, 3.5);
+        blueBeacon.position.set(-0.18, beaconY, 0.24);
         group.add(blueBeacon);
 
         this.sirenLights.push({ v, redBeacon, blueBeacon });
       }
     }
 
-    // Glowing Headlights
+    // Headlights
     const hlMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
     for (const zOff of [-v.width * 0.32, v.width * 0.32]) {
-      const hl = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 3.2), hlMat);
-      hl.position.set(v.length / 2 + 0.2, 8.5, zOff);
+      const hl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.24), hlMat);
+      hl.position.set(v.length / 2 + 0.01, 0.65, zOff);
       group.add(hl);
     }
 
@@ -794,10 +815,9 @@ export class City3DRenderer {
   }
 
   renderWorld(cameraState, player, vehicles, elapsed) {
-    // Sync 3D Player Mesh
     this.playerMesh.visible = !player.inVehicle;
     if (!player.inVehicle) {
-      this.playerMesh.position.set(player.x, 0, player.y);
+      this.playerMesh.position.set(player.x, 0.22, player.y);
       this.playerMesh.rotation.y = -player.angle;
 
       const swing = player.isMoving ? Math.sin(player.animTime) * 0.65 : 0;
@@ -807,34 +827,30 @@ export class City3DRenderer {
       this.rightArm.rotation.z = swing * 0.8;
     }
 
-    // Sync 3D Vehicle Meshes
     for (const v of vehicles) {
       let mesh = this.vehicleMeshes.get(v);
       if (!mesh) {
         mesh = this.createVehicle3D(v);
         this.vehicleMeshes.set(v, mesh);
       }
-      mesh.position.set(v.x, 0, v.y);
+      mesh.position.set(v.x, 0.22, v.y);
       mesh.rotation.y = -v.angle;
     }
 
-    // Pulse DMP Police Beacons
     for (const s of this.sirenLights) {
       const flash = Math.sin(s.v.sirenPhase) > 0;
       s.redBeacon.material.color.setHex(flash ? 0xff2222 : 0x450a0a);
       s.blueBeacon.material.color.setHex(flash ? 0x172554 : 0x3b82f6);
     }
 
-    // Subtle Hatirjheel water shimmer
     for (const w of this.waterMeshes) {
-      w.position.y = 0.45 + Math.sin(elapsed * 2.2) * 0.14;
+      w.position.y = 0.06 + Math.sin(elapsed * 2.2) * 0.03;
     }
 
-    // Highlight nearest hijackable vehicle
     this.hijackRing.visible = false;
     if (!player.inVehicle) {
       let nearest = null;
-      let bestDist = 68;
+      let bestDist = 4.2;
       for (const v of vehicles) {
         const d = Math.hypot(v.x - player.x, v.y - player.y);
         if (d < bestDist) {
@@ -844,29 +860,27 @@ export class City3DRenderer {
       }
       if (nearest) {
         this.hijackRing.visible = true;
-        this.hijackRing.position.set(nearest.x, 2.2, nearest.y);
-        const s = 1 + Math.sin(elapsed * 8) * 0.08;
+        this.hijackRing.position.set(nearest.x, 0.28, nearest.y);
+        const s = (nearest.length * 0.35) * (1 + Math.sin(elapsed * 8) * 0.06);
         this.hijackRing.scale.set(s, s, 1);
       }
     }
 
-    // Keep directional sun frustum centered near camera target for crisp shadows
-    this.sunLight.position.set(cameraState.targetX + 900, 1600, cameraState.targetZ + 800);
+    this.sunLight.position.set(cameraState.targetX + 260, 420, cameraState.targetZ + 220);
     this.sunLight.target.position.set(cameraState.targetX, 0, cameraState.targetZ);
     this.sunLight.target.updateMatrixWorld();
 
-    // Update 3D Camera Position & LookAt
     const dist = cameraState.distance;
     const pitch = cameraState.pitch;
     const yaw = cameraState.yaw;
 
     const horiz = dist * Math.cos(pitch);
     const camX = cameraState.targetX - Math.cos(yaw) * horiz;
-    const camY = Math.max(24, dist * Math.sin(pitch));
+    const camY = Math.max(1.5, dist * Math.sin(pitch));
     const camZ = cameraState.targetZ - Math.sin(yaw) * horiz;
 
     this.camera.position.set(camX, camY, camZ);
-    this.camera.lookAt(cameraState.targetX, 14, cameraState.targetZ);
+    this.camera.lookAt(cameraState.targetX, 1.35, cameraState.targetZ);
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -917,7 +931,6 @@ export class City3DRenderer {
       minimapCtx.fillRect(v.x * sx - 1.5, v.y * sy - 1.5, 3, 3);
     }
 
-    // Player heading arrow
     minimapCtx.save();
     minimapCtx.translate(player.x * sx, player.y * sy);
     minimapCtx.rotate(player.angle);

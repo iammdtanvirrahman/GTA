@@ -1,25 +1,33 @@
 /**
- * Real-world Google Maps-derived spatial layout of Tejgaon, Dhaka.
- * Bounding box:
+ * Real-world 1:1 Metric Spatial Layout of Tejgaon, Dhaka.
+ * Scale: 1 World Unit = 1.0 Meter
+ *
+ * Bounding box (~2.44 km North-South x 2.55 km East-West):
  *   Lat: 23.7510° N (South: Kawran Bazar) -> 23.7730° N (North: Mohakhali/Old Airport North)
  *   Lng: 90.3860° E (West: Bijoy Sarani / Old Airport) -> 90.4110° E (East: Hatirjheel)
  *
- * World coordinates: 4200 x 3800 px (1 px ≈ 0.62 meters)
+ * Real-life reference dimensions applied across the map:
+ *   - 4-lane Dhaka arterial avenues: 22m–26m wide (~3.5m per lane + median)
+ *   - 2-lane collector streets: 12m–14m wide
+ *   - Local industrial lanes: 7.5m wide
+ *   - Dual-gauge railway corridor: 1.676m broad gauge / 1.0m meter gauge inside 11m ballast bed
+ *   - Tejgaon Old Airport Runway (17/35): 1,750m long x 45m wide
  */
 
 export const MAP_CONFIG = {
-  width: 4200,
-  height: 3800,
+  width: 2550,
+  height: 2440,
+  metersPerUnit: 1.0,
   bounds: {
     minLat: 23.7510,
     maxLat: 23.7730,
     minLng: 90.3860,
     maxLng: 90.4110
   },
-  spawn: { x: 2220, y: 2150 } // Heart of Tejgaon Industrial Area (Shaheed Tajuddin Ahmed Ave)
+  // Heart of Tejgaon Industrial Area (Shaheed Tajuddin Ahmed Ave)
+  spawn: { x: 1525, y: 1380 }
 };
 
-// Convert normalized [0..1] map coordinates to world pixels
 const wx = (nx) => Math.round(nx * MAP_CONFIG.width);
 const wy = (ny) => Math.round(ny * MAP_CONFIG.height);
 
@@ -53,7 +61,7 @@ export const WATER_BODIES = [
 ];
 
 /**
- * Zones & Green Grounds (Tejgaon Old Airport Runway, Parks, Industrial Blocks)
+ * Zones & Green Grounds
  */
 export const ZONES = [
   {
@@ -61,9 +69,9 @@ export const ZONES = [
     name: "Tejgaon Old Airport",
     type: "airfield",
     x: wx(0.11),
-    y: wy(0.08),
-    w: wx(0.32),
-    h: wy(0.42)
+    y: wy(0.06),
+    w: wx(0.31),
+    h: wy(0.45)
   },
   {
     id: "industrial_north",
@@ -113,13 +121,13 @@ export const ZONES = [
 ];
 
 /**
- * Major & Secondary Roads matching Google Maps Tejgaon Topology
+ * Major & Secondary Roads with true-to-life Dhaka lane widths (in meters)
  */
 export const ROADS = [
-  // 1. Kazi Nazrul Islam Ave / Airport Road (North-South Western Artery)
+  // 1. Kazi Nazrul Islam Ave / Airport Road (26m 4-lane divided highway)
   {
     name: "Kazi Nazrul Islam Ave / Airport Rd",
-    width: 78,
+    width: 26,
     lanes: 4,
     type: "arterial",
     points: [
@@ -131,10 +139,10 @@ export const ROADS = [
       { x: wx(0.36), y: wy(1.00) }
     ]
   },
-  // 2. Shaheed Tajuddin Ahmed Ave (Tejgaon Industrial Main Spine)
+  // 2. Shaheed Tajuddin Ahmed Ave (24m 4-lane main spine)
   {
     name: "Shaheed Tajuddin Ahmed Ave",
-    width: 74,
+    width: 24,
     lanes: 4,
     type: "arterial",
     points: [
@@ -145,10 +153,10 @@ export const ROADS = [
       { x: wx(0.56), y: wy(1.00) }
     ]
   },
-  // 3. Bijoy Sarani Link Road (East-West Connector across Railway)
+  // 3. Bijoy Sarani - Tejgaon Link Road (22m 4-lane East-West connector)
   {
     name: "Bijoy Sarani - Tejgaon Link Rd",
-    width: 66,
+    width: 22,
     lanes: 4,
     type: "arterial",
     points: [
@@ -159,10 +167,10 @@ export const ROADS = [
       { x: wx(0.79), y: wy(0.45) }
     ]
   },
-  // 4. Love Road (Tejgaon Industrial East-West)
+  // 4. Love Road (13m 2-lane industrial collector)
   {
     name: "Love Road",
-    width: 48,
+    width: 13,
     lanes: 2,
     type: "collector",
     points: [
@@ -171,10 +179,10 @@ export const ROADS = [
       { x: wx(0.77), y: wy(0.35) }
     ]
   },
-  // 5. Nabisco - Mohakhali Cross Road
+  // 5. Bir Uttam Mir Shawkat Sarak (16m collector)
   {
     name: "Bir Uttam Mir Shawkat Sarak",
-    width: 58,
+    width: 16,
     lanes: 2,
     type: "collector",
     points: [
@@ -183,10 +191,10 @@ export const ROADS = [
       { x: wx(0.88), y: wy(0.21) }
     ]
   },
-  // 6. Tejgaon Station Road / Kunipara Road
+  // 6. Tejgaon Station Road / Kunipara Road (11m)
   {
     name: "Tejgaon Station Road",
-    width: 44,
+    width: 11,
     lanes: 2,
     type: "collector",
     points: [
@@ -195,10 +203,10 @@ export const ROADS = [
       { x: wx(0.71), y: wy(0.66) }
     ]
   },
-  // 7. Panthapath / Kawran Bazar Link
+  // 7. Panthapath / Kawran Bazar Link (22m 4-lane)
   {
     name: "Kazi Nazrul - Panthapath Link",
-    width: 60,
+    width: 22,
     lanes: 4,
     type: "arterial",
     points: [
@@ -208,10 +216,10 @@ export const ROADS = [
       { x: wx(0.74), y: wy(0.82) }
     ]
   },
-  // 8. Hatirjheel Ring Road (West-South Loop)
+  // 8. Hatirjheel Ring Road (14m 2-lane scenic road)
   {
     name: "Hatirjheel Ring Road",
-    width: 46,
+    width: 14,
     lanes: 2,
     type: "scenic",
     points: [
@@ -222,10 +230,10 @@ export const ROADS = [
       { x: wx(0.95), y: wy(0.74) }
     ]
   },
-  // 9. Farmgate - Khamarbari Road
+  // 9. Farmgate - Khamarbari Road (14m)
   {
     name: "Khamarbari Road",
-    width: 50,
+    width: 14,
     lanes: 2,
     type: "collector",
     points: [
@@ -233,10 +241,10 @@ export const ROADS = [
       { x: wx(0.32), y: wy(0.69) }
     ]
   },
-  // 10. Internal Industrial Lanes
+  // 10. Internal Industrial Lanes (8m narrow factory alleys)
   {
     name: "Tejgaon I/A Lane 1",
-    width: 34,
+    width: 8,
     lanes: 2,
     type: "local",
     points: [
@@ -247,7 +255,7 @@ export const ROADS = [
   },
   {
     name: "Tejgaon I/A Lane 2",
-    width: 34,
+    width: 8,
     lanes: 2,
     type: "local",
     points: [
@@ -272,103 +280,105 @@ export const RAILWAY_LINE = {
 };
 
 /**
- * Authentic Tejgaon Landmarks & Buildings
+ * Authentic Tejgaon Landmarks with real-world architectural footprints (in meters)
  */
 export const LANDMARKS = [
   {
+    // Real Tejgaon Old Airport Runway 17/35: ~1,120m visible stretch x 45m wide
     name: "Tejgaon Old Airport Runway",
-    x: wx(0.22),
-    y: wy(0.13),
-    w: 110,
-    h: 1180,
+    x: wx(0.23),
+    y: wy(0.07),
+    w: 45,
+    h: 980,
     style: "runway"
   },
   {
-    name: "Air Force Hangars",
-    x: wx(0.35),
-    y: wy(0.22),
-    w: 170,
-    h: 260,
+    name: "BAF Air Force Hangars",
+    x: wx(0.34),
+    y: wy(0.18),
+    w: 95,
+    h: 150,
     style: "hangar"
   },
   {
     name: "Tejgaon Railway Station",
-    x: wx(0.485),
-    y: wy(0.63),
-    w: 95,
-    h: 210,
+    x: wx(0.483),
+    y: wy(0.62),
+    w: 24,
+    h: 120,
     style: "station"
   },
   {
     name: "Nabisco Biscuit Factory",
     x: wx(0.55),
     y: wy(0.22),
-    w: 210,
-    h: 150,
+    w: 115,
+    h: 82,
     style: "factory"
   },
   {
     name: "Kohinoor Chemical & Industrial Sheds",
     x: wx(0.64),
     y: wy(0.38),
-    w: 220,
-    h: 170,
+    w: 120,
+    h: 92,
     style: "factory"
   },
   {
     name: "Channel i / Media Bhaban",
     x: wx(0.54),
     y: wy(0.53),
-    w: 185,
-    h: 140,
+    w: 96,
+    h: 72,
     style: "office"
   },
   {
     name: "BG Press & Govt Printing",
     x: wx(0.63),
     y: wy(0.56),
-    w: 190,
-    h: 165,
+    w: 110,
+    h: 88,
     style: "factory"
   },
   {
     name: "Ananda Cinema & Farmgate Plaza",
-    x: wx(0.24),
-    y: wy(0.62),
-    w: 210,
-    h: 145,
+    x: wx(0.22),
+    y: wy(0.61),
+    w: 110,
+    h: 78,
     style: "commercial"
   },
   {
     name: "Khamarbari (Dept. of Agriculture)",
-    x: wx(0.14),
+    x: wx(0.13),
     y: wy(0.71),
-    w: 220,
-    h: 150,
+    w: 125,
+    h: 84,
     style: "civic"
   },
   {
     name: "Kawran Bazar Kacha Bazar",
     x: wx(0.38),
     y: wy(0.88),
-    w: 260,
-    h: 170,
+    w: 145,
+    h: 92,
     style: "market"
   },
   {
     name: "WASA Bhaban & PetroBangla",
-    x: wx(0.26),
+    x: wx(0.25),
     y: wy(0.89),
-    w: 180,
-    h: 160,
+    w: 88,
+    h: 78,
     style: "office"
   },
   {
-    name: "Hatirjheel Amphitheater & Bridge",
-    x: wx(0.78),
-    y: wy(0.43),
-    w: 150,
-    h: 95,
+    // Hatirjheel Overpass Bridge matching road width
+    name: "Hatirjheel Overpass Bridge",
+    x: wx(0.77),
+    y: wy(0.435),
+    w: 92,
+    h: 26,
     style: "bridge"
   }
 ];

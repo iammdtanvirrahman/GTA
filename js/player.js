@@ -1,15 +1,22 @@
 import { MAP_CONFIG } from "./tejgaonMapData.js";
 import { resolveWorldCollisions } from "./physics.js";
 
+/**
+ * Real-life 1:1 metric human proportions (1 unit = 1 meter):
+ *   - Height: 1.72m
+ *   - Shoulder width: 0.46m | Collision radius: 0.35m
+ *   - Walk speed: 1.5 m/s (~5.4 km/h) | Sprint speed: 4.8 m/s (~17.3 km/h)
+ */
 export class Player {
   constructor(x = MAP_CONFIG.spawn.x, y = MAP_CONFIG.spawn.y) {
     this.x = x;
     this.y = y;
-    this.radius = 12;
+    this.radius = 0.35;
+    this.height = 1.72;
     this.angle = -Math.PI / 2;
 
-    this.walkSpeed = 165;
-    this.sprintSpeed = 285;
+    this.walkSpeed = 1.65;
+    this.sprintSpeed = 4.85;
     this.stamina = 100;
     this.maxStamina = 100;
     this.health = 100;
@@ -42,7 +49,7 @@ export class Player {
 
       if (input.sprint && this.stamina > 4) {
         this.isSprinting = true;
-        this.stamina = Math.max(0, this.stamina - 32 * dt);
+        this.stamina = Math.max(0, this.stamina - 28 * dt);
       } else {
         this.isSprinting = false;
         this.stamina = Math.min(this.maxStamina, this.stamina + 16 * dt);
@@ -55,7 +62,7 @@ export class Player {
       this.x += vx * speed * dt;
       this.y += vy * speed * dt;
       this.angle = Math.atan2(vy, vx);
-      this.animTime += dt * (this.isSprinting ? 14 : 9);
+      this.animTime += dt * (this.isSprinting ? 13 : 8);
 
       resolveWorldCollisions(this, prevX, prevY, colliders);
     } else {
@@ -66,22 +73,22 @@ export class Player {
   }
 
   tryToggleVehicle(vehicles) {
-    // Exit current vehicle
     if (this.inVehicle) {
       const v = this.inVehicle;
-      // Step out to left side of vehicle
+      // Step out cleanly beside the vehicle door (half vehicle width + 0.85m clearance)
       const exitAngle = v.angle - Math.PI / 2;
-      this.x = v.x + Math.cos(exitAngle) * (v.width * 0.75 + 16);
-      this.y = v.y + Math.sin(exitAngle) * (v.width * 0.75 + 16);
+      const offset = v.width * 0.5 + 0.85;
+      this.x = v.x + Math.cos(exitAngle) * offset;
+      this.y = v.y + Math.sin(exitAngle) * offset;
       this.angle = v.angle;
       v.driver = null;
       this.inVehicle = null;
       return { action: "exit", vehicle: v };
     }
 
-    // Find nearest vehicle within hijack radius
+    // Find nearest vehicle within realistic 4.2m door reach
     let nearest = null;
-    let bestDist = 68;
+    let bestDist = 4.2;
     for (const v of vehicles) {
       const d = Math.hypot(v.x - this.x, v.y - this.y);
       if (d < bestDist) {
@@ -100,58 +107,5 @@ export class Player {
     }
 
     return null;
-  }
-
-  draw(ctx) {
-    if (this.inVehicle) return;
-
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.angle);
-
-    const swing = this.isMoving ? Math.sin(this.animTime) * 5 : 0;
-
-    // Ground shadow
-    ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
-    ctx.beginPath();
-    ctx.ellipse(-2, 3, 12, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Sneakers / Feet
-    ctx.fillStyle = "#161b22";
-    ctx.beginPath();
-    ctx.arc(swing, -5, 3.5, 0, Math.PI * 2);
-    ctx.arc(-swing, 5, 3.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Arms
-    ctx.fillStyle = "#d99b66";
-    ctx.beginPath();
-    ctx.arc(-swing * 0.8, -10, 3.2, 0, Math.PI * 2);
-    ctx.arc(swing * 0.8, 10, 3.2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 90s Dhaka Bomber / Denim Jacket Torso
-    ctx.fillStyle = "#1f6feb";
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 8, 11, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = "#0d1117";
-    ctx.stroke();
-
-    // Head & Dark Hair
-    ctx.fillStyle = "#21262d";
-    ctx.beginPath();
-    ctx.arc(1, 0, 6.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Face / Nose orientation
-    ctx.fillStyle = "#d99b66";
-    ctx.beginPath();
-    ctx.arc(4.5, 0, 3.2, -0.9, 0.9);
-    ctx.fill();
-
-    ctx.restore();
   }
 }
