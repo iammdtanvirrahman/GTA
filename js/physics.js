@@ -1,8 +1,11 @@
 import { MAP_CONFIG, WATER_BODIES, LANDMARKS } from "./tejgaonMapData.js";
+import { getFunctionalBuildingColliders } from "../assets/buildings/functionalBuildings.js";
+
+const GRID_CELL_SIZE = 100;
 
 /**
- * Builds static AABB colliders for solid landmarks and generated urban buildings.
- * Note: "runway" and "bridge" are passable surfaces, not solid walls.
+ * Builds static AABB colliders for solid landmarks, functional buildings, and urban blocks,
+ * plus an O(1) spatial hash grid for fast collision lookups.
  */
 export function buildStaticColliders(urbanBlocks) {
   const colliders = [];
@@ -18,6 +21,10 @@ export function buildStaticColliders(urbanBlocks) {
     });
   }
 
+  for (const fb of getFunctionalBuildingColliders()) {
+    colliders.push(fb);
+  }
+
   for (const b of urbanBlocks) {
     colliders.push({
       x: b.x,
@@ -27,6 +34,28 @@ export function buildStaticColliders(urbanBlocks) {
       label: "Building"
     });
   }
+
+  // Build 100m x 100m spatial hash grid for O(1) collision queries
+  const grid = new Map();
+  for (const box of colliders) {
+    const minCx = Math.floor(box.x / GRID_CELL_SIZE);
+    const maxCx = Math.floor((box.x + box.w) / GRID_CELL_SIZE);
+    const minCy = Math.floor(box.y / GRID_CELL_SIZE);
+    const maxCy = Math.floor((box.y + box.h) / GRID_CELL_SIZE);
+
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      for (let cy = minCy; cy <= maxCy; cy++) {
+        const key = `${cx},${cy}`;
+        let bucket = grid.get(key);
+        if (!bucket) {
+          bucket = [];
+          grid.set(key, bucket);
+        }
+        bucket.push(box);
+      }
+    }
+  }
+  colliders._spatialGrid = grid;
 
   return colliders;
 }
@@ -98,7 +127,7 @@ export function resolveCircleAABB(entity, box) {
 }
 
 /**
- * Resolves circle collisions against world borders, buildings, and water shorelines.
+ * Resolves circle collisions against world borders, buildings (via spatial grid), and water shorelines.
  */
 export function resolveWorldCollisions(entity, prevX, prevY, colliders) {
   const pad = entity.radius + 1.5;
@@ -106,18 +135,48 @@ export function resolveWorldCollisions(entity, prevX, prevY, colliders) {
   entity.y = Math.max(pad, Math.min(MAP_CONFIG.height - pad, entity.y));
 
   let collided = false;
-  for (let i = 0; i < colliders.length; i++) {
-    const box = colliders[i];
-    if (
-      entity.x + entity.radius < box.x ||
-      entity.x - entity.radius > box.x + box.w ||
-      entity.y + entity.radius < box.y ||
-      entity.y - entity.radius > box.y + box.h
-    ) {
-      continue;
+  const grid = colliders._spatialGrid;
+
+  if (grid) {
+    const minCx = Math.floor((entity.x - entity.radius) / GRID_CELL_SIZE);
+    const maxCx = Math.floor((entity.x + entity.radius) / GRID_CELL_SIZE);
+    const minCy = Math.floor((entity.y - entity.radius) / GRID_CELL_SIZE);
+    const maxCy = Math.floor((entity.y + entity.radius) / GRID_CELL_SIZE);
+
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      for (let cy = minCy; cy <= maxCy; cy++) {
+        const bucket = grid.get(`${cx},${cy}`);
+        if (!bucket) continue;
+        for (let i = 0; i < bucket.length; i++) {
+          const box = bucket[i];
+          if (
+            entity.x + entity.radius < box.x ||
+            entity.x - entity.radius > box.x + box.w ||
+            entity.y + entity.radius < box.y ||
+            entity.y - entity.radius > box.y + box.h
+          ) {
+            continue;
+          }
+          if (resolveCircleAABB(entity, box)) {
+            collided = true;
+          }
+        }
+      }
     }
-    if (resolveCircleAABB(entity, box)) {
-      collided = true;
+  } else {
+    for (let i = 0; i < colliders.length; i++) {
+      const box = colliders[i];
+      if (
+        entity.x + entity.radius < box.x ||
+        entity.x - entity.radius > box.x + box.w ||
+        entity.y + entity.radius < box.y ||
+        entity.y - entity.radius > box.y + box.h
+      ) {
+        continue;
+      }
+      if (resolveCircleAABB(entity, box)) {
+        collided = true;
+      }
     }
   }
 

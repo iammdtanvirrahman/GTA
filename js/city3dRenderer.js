@@ -7,10 +7,18 @@ import {
   RAILWAY_LINE,
   LANDMARKS
 } from "./tejgaonMapData.js";
-import { buildDetailedBuildingAsset } from "../assets/buildings/buildingFactory.js";
+import {
+  buildDetailedBuildingAsset,
+  BuildingInstanceBatcher
+} from "../assets/buildings/buildingFactory.js";
+import {
+  getFunctionalBuildings,
+  FunctionalBuildingManager
+} from "../assets/buildings/functionalBuildings.js";
 
 /**
  * Deterministic 1:1 metric urban blocks & trees in Tejgaon (1 unit = 1 meter):
+ *   - Excludes functional building parcels so Safehouse, Workshop & Clinic sit cleanly
  *   - Industrial tin-sheds & godowns: 16m–34m footprints, 5.5m–10m tall
  *   - Dhaka mid-rise apartments/offices: 16m–34m footprints, 12m–30m tall (4 to 9 stories)
  *   - Roadside trees: 0.25m trunk radius, 2.6m–5.2m canopy radius
@@ -18,6 +26,8 @@ import { buildDetailedBuildingAsset } from "../assets/buildings/buildingFactory.
 export function generateUrbanLayout() {
   const blocks = [];
   const trees = [];
+  const functionalParcels = getFunctionalBuildings();
+
   let seed = 199607;
   const rand = () => {
     seed = (seed * 16807) % 2147483647;
@@ -34,6 +44,21 @@ export function generateUrbanLayout() {
       const bh = 15 + rand() * 18;
 
       if (isNearRoadOrWater(bx + bw / 2, by + bh / 2, 24)) continue;
+
+      // Keep clear of dedicated functional buildings
+      let overlapsFunctional = false;
+      for (const fb of functionalParcels) {
+        if (
+          bx - 8 < fb.x + fb.w &&
+          bx + bw + 8 > fb.x &&
+          by - 8 < fb.y + fb.h &&
+          by + bh + 8 > fb.y
+        ) {
+          overlapsFunctional = true;
+          break;
+        }
+      }
+      if (overlapsFunctional) continue;
 
       const palette = [0x475569, 0x52525b, 0x4b5563, 0x6b4f3f, 0x3f5a52, 0x5b4652];
       const isWarehouse = rand() > 0.52;
@@ -117,22 +142,26 @@ export class City3DRenderer {
       54,
       window.innerWidth / window.innerHeight,
       0.25,
-      2800
+      2600
     );
 
     this.vehicleMeshes = new Map();
     this.sirenLights = [];
     this.waterMeshes = [];
+    this.lodBuildings = [];
+    this._lastElapsed = 0;
+    this._minimapFrame = 0;
 
     this.setupLights();
     this.buildTerrainAndZones();
     this.buildWaterBodies();
     this.buildRoadsAndRailway();
-    this.buildLandmarks();
-    this.buildUrbanBlocks();
-    this.buildTrees();
+    this.buildAllBuildingsAndLandmarks();
+    this.buildTreesInstanced();
     this.buildPlayerMesh();
     this.buildHijackRing();
+
+    this.functionalBuildings = new FunctionalBuildingManager(this.scene);
   }
 
   resize() {
@@ -142,7 +171,7 @@ export class City3DRenderer {
   }
 
   setupLights() {
-    const hemi = new THREE.HemisphereLight(0x93c5fd, 0x292524, 0.92);
+    const hemi = new THREE.HemisphereLight(0x93c5fd, 0x292524, 0.94);
     this.scene.add(hemi);
 
     const sun = new THREE.DirectionalLight(0xffedd5, 1.95);
@@ -242,6 +271,10 @@ export class City3DRenderer {
     }
   }
 
+  /**
+   * Builds roads, instanced road dashes, instanced streetlamps, and instanced railway sleepers
+   * to keep draw calls minimal while maintaining dense 1:1 metric street detail.
+   */
   buildRoadsAndRailway() {
     const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.85 });
     const asphaltMat = new THREE.MeshStandardMaterial({ color: 0x2d333b, roughness: 0.88 });
@@ -249,6 +282,13 @@ export class City3DRenderer {
     const whiteLineMat = new THREE.MeshBasicMaterial({ color: 0xd1d5db });
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, metalness: 0.6 });
     const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+
+    const yellowDashMatrices = [];
+    const whiteDashMatrices = [];
+    const poleMatrices = [];
+    const armMatrices = [];
+    const bulbMatrices = [];
+    const dummy = new THREE.Object3D();
 
     for (const road of ROADS) {
       const sidewalkMargin = road.type === "arterial" ? 4.4 : 2.6;
@@ -285,16 +325,14 @@ export class City3DRenderer {
 
         const dashStep = 9.0;
         const dashCount = Math.floor(len / dashStep);
-        const dashMat = road.lanes === 4 ? yellowLineMat : whiteLineMat;
+        const targetDashList = road.lanes === 4 ? yellowDashMatrices : whiteDashMatrices;
         for (let d = 0; d < dashCount; d++) {
           const t = (d + 0.5) / dashCount;
-          const lx = p1.x + dx * t;
-          const lz = p1.y + dz * t;
-          const dash = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.16), dashMat);
-          dash.rotation.x = -Math.PI / 2;
-          dash.rotation.z = -angle;
-          dash.position.set(lx, 0.23, lz);
-          this.scene.add(dash);
+          dummy.position.set(p1.x + dx * t, 0.23, p1.y + dz * t);
+          dummy.rotation.set(-Math.PI / 2, 0, -angle);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          targetDashList.push(dummy.matrix.clone());
         }
 
         if (road.type === "arterial" && len > 50) {
@@ -309,26 +347,41 @@ export class City3DRenderer {
             const sx = p1.x + dx * t + nx * offsetDist * side;
             const sz = p1.y + dz * t + nz * offsetDist * side;
 
-            const pole = new THREE.Mesh(
-              new THREE.CylinderGeometry(0.11, 0.16, 8.5, 6),
-              poleMat
-            );
-            pole.position.set(sx, 4.25, sz);
-            this.scene.add(pole);
+            dummy.position.set(sx, 4.25, sz);
+            dummy.rotation.set(0, 0, 0);
+            dummy.scale.set(1, 1, 1);
+            dummy.updateMatrix();
+            poleMatrices.push(dummy.matrix.clone());
 
-            const arm = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.12), poleMat);
-            arm.position.set(sx - nx * 0.9 * side, 8.4, sz - nz * 0.9 * side);
-            arm.rotation.y = -angle;
-            this.scene.add(arm);
+            dummy.position.set(sx - nx * 0.9 * side, 8.4, sz - nz * 0.9 * side);
+            dummy.rotation.set(0, -angle, 0);
+            dummy.updateMatrix();
+            armMatrices.push(dummy.matrix.clone());
 
-            const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.18, 0.32), bulbMat);
-            lamp.position.set(sx - nx * 1.8 * side, 8.3, sz - nz * 1.8 * side);
-            this.scene.add(lamp);
+            dummy.position.set(sx - nx * 1.8 * side, 8.3, sz - nz * 1.8 * side);
+            dummy.updateMatrix();
+            bulbMatrices.push(dummy.matrix.clone());
           }
         }
       }
     }
 
+    const flushInstanced = (geo, mat, matrices) => {
+      if (!matrices.length) return;
+      const im = new THREE.InstancedMesh(geo, mat, matrices.length);
+      for (let i = 0; i < matrices.length; i++) im.setMatrixAt(i, matrices[i]);
+      im.instanceMatrix.needsUpdate = true;
+      this.scene.add(im);
+    };
+
+    const dashGeo = new THREE.PlaneGeometry(3.2, 0.16);
+    flushInstanced(dashGeo, yellowLineMat, yellowDashMatrices);
+    flushInstanced(dashGeo, whiteLineMat, whiteDashMatrices);
+    flushInstanced(new THREE.CylinderGeometry(0.11, 0.16, 8.5, 6), poleMat, poleMatrices);
+    flushInstanced(new THREE.BoxGeometry(2.2, 0.12, 0.12), poleMat, armMatrices);
+    flushInstanced(new THREE.BoxGeometry(0.65, 0.18, 0.32), bulbMat, bulbMatrices);
+
+    // Railway Line with GPU-Instanced Sleepers
     const ballastMat = new THREE.MeshStandardMaterial({ color: 0x443b32, roughness: 0.95 });
     const sleeperMat = new THREE.MeshStandardMaterial({ color: 0x261e18, roughness: 0.9 });
     const railMat = new THREE.MeshStandardMaterial({
@@ -337,6 +390,7 @@ export class City3DRenderer {
       roughness: 0.25
     });
 
+    const sleeperMatrices = [];
     const pts = RAILWAY_LINE.points;
     for (let i = 0; i < pts.length - 1; i++) {
       const p1 = pts[i];
@@ -357,10 +411,11 @@ export class City3DRenderer {
       const sleepers = Math.floor(len / 0.85);
       for (let s = 0; s < sleepers; s++) {
         const t = s / sleepers;
-        const sl = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 2.75), sleeperMat);
-        sl.position.set(p1.x + dx * t, 0.4, p1.y + dz * t);
-        sl.rotation.y = -angle;
-        this.scene.add(sl);
+        dummy.position.set(p1.x + dx * t, 0.4, p1.y + dz * t);
+        dummy.rotation.set(0, -angle, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        sleeperMatrices.push(dummy.matrix.clone());
       }
 
       for (const offset of [-0.84, 0.84]) {
@@ -374,9 +429,17 @@ export class City3DRenderer {
         this.scene.add(rail);
       }
     }
+
+    flushInstanced(new THREE.BoxGeometry(0.26, 0.16, 2.75), sleeperMat, sleeperMatrices);
   }
 
-  buildLandmarks() {
+  /**
+   * Builds all landmarks, dedicated functional buildings, and urban blocks,
+   * flushing repetitive 3D details into GPU InstancedMeshes.
+   */
+  buildAllBuildingsAndLandmarks() {
+    const batcher = new BuildingInstanceBatcher();
+
     for (const lm of LANDMARKS) {
       const cx = lm.x + lm.w / 2;
       const cz = lm.y + lm.h / 2;
@@ -424,50 +487,89 @@ export class City3DRenderer {
         continue;
       }
 
-      // Load detailed GTA-style 3D building asset from assets/buildings/buildingFactory.js
-      const landmarkBuilding = buildDetailedBuildingAsset(lm);
-      this.scene.add(landmarkBuilding);
+      const landmarkMesh = buildDetailedBuildingAsset(lm, batcher);
+      this.scene.add(landmarkMesh);
+      if (landmarkMesh.userData.detailGroup) {
+        this.lodBuildings.push(landmarkMesh);
+      }
     }
-  }
 
-  buildUrbanBlocks() {
+    for (const fb of getFunctionalBuildings()) {
+      const fbMesh = buildDetailedBuildingAsset(fb, batcher);
+      this.scene.add(fbMesh);
+      if (fbMesh.userData.detailGroup) {
+        this.lodBuildings.push(fbMesh);
+      }
+    }
+
     for (const b of this.urbanLayout.blocks) {
-      const detailedBlock = buildDetailedBuildingAsset(b);
-      this.scene.add(detailedBlock);
+      const blockMesh = buildDetailedBuildingAsset(b, batcher);
+      this.scene.add(blockMesh);
+      if (blockMesh.userData.detailGroup) {
+        this.lodBuildings.push(blockMesh);
+      }
     }
+
+    batcher.flushToScene(this.scene);
   }
 
-  buildTrees() {
+  /**
+   * Renders all 620 trees using 3 GPU InstancedMeshes (3 draw calls total instead of 1,860!)
+   */
+  buildTreesInstanced() {
+    const trees = this.urbanLayout.trees;
+    if (!trees.length) return;
+
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x452715, roughness: 0.9 });
     const leafMat1 = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.8 });
     const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.78 });
 
-    for (const t of this.urbanLayout.trees) {
-      const group = new THREE.Group();
-      group.position.set(t.x, 0, t.y);
+    const trunkIM = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.22, 0.35, 3.6, 6),
+      trunkMat,
+      trees.length
+    );
+    trunkIM.castShadow = true;
 
-      const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.22, 0.35, 3.6, 6),
-        trunkMat
-      );
-      trunk.position.y = 1.8;
-      trunk.castShadow = true;
-      group.add(trunk);
+    const crown1IM = new THREE.InstancedMesh(
+      new THREE.DodecahedronGeometry(1, 1),
+      leafMat1,
+      trees.length
+    );
+    crown1IM.castShadow = true;
 
-      const crown1 = new THREE.Mesh(new THREE.DodecahedronGeometry(t.r, 1), leafMat1);
-      crown1.position.y = 4.6;
-      crown1.castShadow = true;
-      group.add(crown1);
+    const crown2IM = new THREE.InstancedMesh(
+      new THREE.DodecahedronGeometry(1, 1),
+      leafMat2,
+      trees.length
+    );
 
-      const crown2 = new THREE.Mesh(
-        new THREE.DodecahedronGeometry(t.r * 0.72, 1),
-        leafMat2
-      );
-      crown2.position.set(0.7, 6.1, -0.5);
-      group.add(crown2);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < trees.length; i++) {
+      const t = trees[i];
 
-      this.scene.add(group);
+      dummy.position.set(t.x, 1.8, t.y);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      trunkIM.setMatrixAt(i, dummy.matrix);
+
+      dummy.position.set(t.x, 4.6, t.y);
+      dummy.scale.set(t.r, t.r, t.r);
+      dummy.updateMatrix();
+      crown1IM.setMatrixAt(i, dummy.matrix);
+
+      dummy.position.set(t.x + 0.7, 6.1, t.y - 0.5);
+      const r2 = t.r * 0.72;
+      dummy.scale.set(r2, r2, r2);
+      dummy.updateMatrix();
+      crown2IM.setMatrixAt(i, dummy.matrix);
     }
+
+    trunkIM.instanceMatrix.needsUpdate = true;
+    crown1IM.instanceMatrix.needsUpdate = true;
+    crown2IM.instanceMatrix.needsUpdate = true;
+
+    this.scene.add(trunkIM, crown1IM, crown2IM);
   }
 
   buildPlayerMesh() {
@@ -703,6 +805,9 @@ export class City3DRenderer {
   }
 
   renderWorld(cameraState, player, vehicles, elapsed) {
+    const dt = Math.min(0.05, Math.max(0.001, elapsed - this._lastElapsed));
+    this._lastElapsed = elapsed;
+
     this.playerMesh.visible = !player.inVehicle;
     if (!player.inVehicle) {
       this.playerMesh.position.set(player.x, 0.22, player.y);
@@ -723,6 +828,20 @@ export class City3DRenderer {
       }
       mesh.position.set(v.x, 0.22, v.y);
       mesh.rotation.y = -v.angle;
+    }
+
+    // Distance LOD Culling for building sub-details beyond 420m
+    const lodRadiusSq = 420 * 420;
+    for (let i = 0; i < this.lodBuildings.length; i++) {
+      const b = this.lodBuildings[i];
+      const dx = b.position.x - cameraState.targetX;
+      const dz = b.position.z - cameraState.targetZ;
+      b.userData.detailGroup.visible = dx * dx + dz * dz < lodRadiusSq;
+    }
+
+    // Update interactive functional buildings (Safehouse, Auto Workshop, Clinic, Bazaar, Station)
+    if (this.functionalBuildings) {
+      this.functionalBuildings.update(player, vehicles, this.vehicleMeshes, elapsed, dt);
     }
 
     for (const s of this.sirenLights) {
@@ -749,7 +868,7 @@ export class City3DRenderer {
       if (nearest) {
         this.hijackRing.visible = true;
         this.hijackRing.position.set(nearest.x, 0.28, nearest.y);
-        const s = (nearest.length * 0.35) * (1 + Math.sin(elapsed * 8) * 0.06);
+        const s = nearest.length * 0.35 * (1 + Math.sin(elapsed * 8) * 0.06);
         this.hijackRing.scale.set(s, s, 1);
       }
     }
@@ -774,6 +893,10 @@ export class City3DRenderer {
   }
 
   renderMinimap(minimapCtx, player, vehicles) {
+    // Throttle 2D minimap redraws to every 3rd frame (~20 FPS) to keep 3D frame times fast
+    this._minimapFrame = (this._minimapFrame + 1) % 3;
+    if (this._minimapFrame !== 0) return;
+
     const mw = minimapCtx.canvas.width;
     const mh = minimapCtx.canvas.height;
     const sx = mw / MAP_CONFIG.width;
@@ -813,6 +936,16 @@ export class City3DRenderer {
       else minimapCtx.lineTo(p.x * sx, p.y * sy);
     });
     minimapCtx.stroke();
+
+    // Render functional building blips on the radar (Safehouse, Workshop, Clinic, Station)
+    if (this.functionalBuildings) {
+      for (const z of this.functionalBuildings.zones) {
+        minimapCtx.fillStyle = `#${z.color.toString(16).padStart(6, "0")}`;
+        minimapCtx.beginPath();
+        minimapCtx.arc(z.x * sx, z.z * sy, 2.8, 0, Math.PI * 2);
+        minimapCtx.fill();
+      }
+    }
 
     for (const v of vehicles) {
       minimapCtx.fillStyle = v.id === "police" ? "#3b82f6" : "#9ca3af";
