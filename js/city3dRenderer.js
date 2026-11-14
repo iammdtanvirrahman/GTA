@@ -7,12 +7,13 @@ import {
   RAILWAY_LINE,
   LANDMARKS
 } from "./tejgaonMapData.js";
+import { buildDetailedBuildingAsset } from "../assets/buildings/buildingFactory.js";
 
 /**
- * Generates deterministic 1:1 metric urban blocks & trees in Tejgaon (1 unit = 1 meter):
- *   - Industrial tin-sheds & godowns: 14m–28m footprints, 5m–9m tall
- *   - Dhaka mid-rise apartments/offices: 16m–30m footprints, 12m–28m tall (4 to 9 stories)
- *   - Roadside trees: 0.25m trunk radius, 2.5m–5.5m canopy radius, 6m–11m height
+ * Deterministic 1:1 metric urban blocks & trees in Tejgaon (1 unit = 1 meter):
+ *   - Industrial tin-sheds & godowns: 16m–34m footprints, 5.5m–10m tall
+ *   - Dhaka mid-rise apartments/offices: 16m–34m footprints, 12m–30m tall (4 to 9 stories)
+ *   - Roadside trees: 0.25m trunk radius, 2.6m–5.2m canopy radius
  */
 export function generateUrbanLayout() {
   const blocks = [];
@@ -34,7 +35,7 @@ export function generateUrbanLayout() {
 
       if (isNearRoadOrWater(bx + bw / 2, by + bh / 2, 24)) continue;
 
-      const palette = [0x3b4252, 0x434c5e, 0x4c566a, 0x5c4738, 0x3b4d47, 0x523f49];
+      const palette = [0x475569, 0x52525b, 0x4b5563, 0x6b4f3f, 0x3f5a52, 0x5b4652];
       const isWarehouse = rand() > 0.52;
       blocks.push({
         x: bx,
@@ -87,33 +88,9 @@ function isNearRoadOrWater(x, y, margin) {
       return true;
     }
   }
-  // Keep Hatirjheel basin & Old Airport runway strip clear
   if (x > 1710 && y > 680 && y < 1860) return true;
   if (x > 260 && x < 1080 && y > 130 && y < 1260) return true;
   return false;
-}
-
-function makeSignTexture(text, bg = "#0d1117", fg = "#f59e0b", border = "#f59e0b") {
-  const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 128;
-  const g = c.getContext("2d");
-
-  g.fillStyle = bg;
-  g.fillRect(0, 0, c.width, c.height);
-  g.strokeStyle = border;
-  g.lineWidth = 8;
-  g.strokeRect(6, 6, c.width - 12, c.height - 12);
-
-  g.fillStyle = fg;
-  g.font = "bold 32px Consolas, monospace";
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  g.fillText(text, c.width / 2, c.height / 2);
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
 }
 
 export class City3DRenderer {
@@ -136,7 +113,6 @@ export class City3DRenderer {
     this.scene.background = new THREE.Color(0x161d29);
     this.scene.fog = new THREE.FogExp2(0x1a2230, 0.0011);
 
-    // Near clipping plane = 0.25m so close human-eye camera views never clip
     this.camera = new THREE.PerspectiveCamera(
       54,
       window.innerWidth / window.innerHeight,
@@ -166,7 +142,7 @@ export class City3DRenderer {
   }
 
   setupLights() {
-    const hemi = new THREE.HemisphereLight(0x93c5fd, 0x292524, 0.9);
+    const hemi = new THREE.HemisphereLight(0x93c5fd, 0x292524, 0.92);
     this.scene.add(hemi);
 
     const sun = new THREE.DirectionalLight(0xffedd5, 1.95);
@@ -218,7 +194,6 @@ export class City3DRenderer {
       this.scene.add(mesh);
     }
 
-    // Perimeter boundary wall (3.2m high)
     const wallMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.6 });
     const h = 3.2;
     const t = 1.5;
@@ -290,7 +265,6 @@ export class City3DRenderer {
         const mx = (p1.x + p2.x) / 2;
         const mz = (p1.y + p2.y) / 2;
 
-        // Raised Dhaka footpath (0.18m curb height)
         const curbMesh = new THREE.Mesh(
           new THREE.BoxGeometry(len + road.width * 0.5, 0.18, road.width + sidewalkMargin),
           sidewalkMat
@@ -300,7 +274,6 @@ export class City3DRenderer {
         curbMesh.receiveShadow = true;
         this.scene.add(curbMesh);
 
-        // Asphalt surface
         const roadMesh = new THREE.Mesh(
           new THREE.BoxGeometry(len + road.width * 0.35, 0.22, road.width),
           asphaltMat
@@ -310,7 +283,6 @@ export class City3DRenderer {
         roadMesh.receiveShadow = true;
         this.scene.add(roadMesh);
 
-        // Real-life 3.0m dashed lane lines (0.15m wide)
         const dashStep = 9.0;
         const dashCount = Math.floor(len / dashStep);
         const dashMat = road.lanes === 4 ? yellowLineMat : whiteLineMat;
@@ -325,7 +297,6 @@ export class City3DRenderer {
           this.scene.add(dash);
         }
 
-        // Real-life 8.5m streetlamps spaced every 38m along arterial roads
         if (road.type === "arterial" && len > 50) {
           const lampStep = 38;
           const lamps = Math.floor(len / lampStep);
@@ -358,7 +329,6 @@ export class City3DRenderer {
       }
     }
 
-    // Real-life Bangladesh Railway Broad-Gauge Track (1.676m rail gauge, 2.75m sleepers)
     const ballastMat = new THREE.MeshStandardMaterial({ color: 0x443b32, roughness: 0.95 });
     const sleeperMat = new THREE.MeshStandardMaterial({ color: 0x261e18, roughness: 0.9 });
     const railMat = new THREE.MeshStandardMaterial({
@@ -393,7 +363,6 @@ export class City3DRenderer {
         this.scene.add(sl);
       }
 
-      // Broad-gauge 1.676m spacing (+/- 0.84m from center)
       for (const offset of [-0.84, 0.84]) {
         const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.18, 0.1), railMat);
         rail.position.set(
@@ -408,17 +377,6 @@ export class City3DRenderer {
   }
 
   buildLandmarks() {
-    // True-to-life landmark heights in meters
-    const landmarkStyles = {
-      hangar: { height: 14, color: 0x475569 },
-      station: { height: 7.5, color: 0x7c2d12 },
-      factory: { height: 15, color: 0x334155 },
-      office: { height: 42, color: 0x1e3a5f }, // ~12-story WASA / Media Bhaban
-      commercial: { height: 26, color: 0x581c87 }, // ~7-story Farmgate plaza
-      civic: { height: 18, color: 0x14532d },
-      market: { height: 8.5, color: 0x78350f }
-    };
-
     for (const lm of LANDMARKS) {
       const cx = lm.x + lm.w / 2;
       const cz = lm.y + lm.h / 2;
@@ -466,71 +424,16 @@ export class City3DRenderer {
         continue;
       }
 
-      const spec = landmarkStyles[lm.style] || { height: 14, color: 0x374151 };
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(lm.w, spec.height, lm.h),
-        new THREE.MeshStandardMaterial({ color: spec.color, roughness: 0.72 })
-      );
-      mesh.position.set(cx, spec.height / 2, cz);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.scene.add(mesh);
-
-      const trim = new THREE.Mesh(
-        new THREE.BoxGeometry(lm.w + 0.8, 0.8, lm.h + 0.8),
-        new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.5 })
-      );
-      trim.position.set(cx, spec.height + 0.4, cz);
-      this.scene.add(trim);
-
-      const tex = makeSignTexture(lm.name);
-      const signW = Math.min(lm.w * 0.85, 32);
-      const signH = signW * 0.25;
-      const signMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(signW, signH),
-        new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })
-      );
-      signMesh.position.set(cx, spec.height + signH * 0.65, cz);
-      this.scene.add(signMesh);
+      // Load detailed GTA-style 3D building asset from assets/buildings/buildingFactory.js
+      const landmarkBuilding = buildDetailedBuildingAsset(lm);
+      this.scene.add(landmarkBuilding);
     }
   }
 
   buildUrbanBlocks() {
-    const tankMat = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
-      roughness: 0.4,
-      metalness: 0.2
-    });
-    const parapetMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.85 });
-
     for (const b of this.urbanLayout.blocks) {
-      const cx = b.x + b.w / 2;
-      const cz = b.y + b.h / 2;
-
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(b.w, b.height, b.h),
-        new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.8 })
-      );
-      mesh.position.set(cx, b.height / 2, cz);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.scene.add(mesh);
-
-      // 0.9m rooftop parapet wall
-      const roof = new THREE.Mesh(
-        new THREE.BoxGeometry(b.w + 0.4, 0.9, b.h + 0.4),
-        parapetMat
-      );
-      roof.position.set(cx, b.height + 0.45, cz);
-      this.scene.add(roof);
-
-      // Realistic 1,500L rooftop water tank (1.2m diameter x 1.5m tall)
-      if (b.hasWaterTank) {
-        const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.5, 10), tankMat);
-        tank.position.set(cx + b.w * 0.2, b.height + 1.55, cz - b.h * 0.2);
-        tank.castShadow = true;
-        this.scene.add(tank);
-      }
+      const detailedBlock = buildDetailedBuildingAsset(b);
+      this.scene.add(detailedBlock);
     }
   }
 
@@ -567,9 +470,6 @@ export class City3DRenderer {
     }
   }
 
-  /**
-   * 1:1 Realistic Human Proportions (1.72m tall, 0.46m shoulder width)
-   */
   buildPlayerMesh() {
     const group = new THREE.Group();
 
@@ -578,7 +478,6 @@ export class City3DRenderer {
     const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
     const hairMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.85 });
 
-    // Legs (0.82m inseam)
     this.leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.82, 0.16), pantsMat);
     this.leftLeg.position.set(0, 0.41, -0.11);
     this.leftLeg.castShadow = true;
@@ -589,13 +488,11 @@ export class City3DRenderer {
     this.rightLeg.castShadow = true;
     group.add(this.rightLeg);
 
-    // Torso (0.58m tall, 0.44m wide)
     const torso = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.58, 0.44), jacketMat);
     torso.position.set(0, 1.11, 0);
     torso.castShadow = true;
     group.add(torso);
 
-    // Arms (0.56m long)
     this.leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.56, 0.13), jacketMat);
     this.leftArm.position.set(0, 1.1, -0.29);
     this.leftArm.castShadow = true;
@@ -606,7 +503,6 @@ export class City3DRenderer {
     this.rightArm.castShadow = true;
     group.add(this.rightArm);
 
-    // Head (0.24m tall) + Hair -> Total height = 1.72m
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.21), skinMat);
     head.position.set(0.02, 1.54, 0);
     head.castShadow = true;
@@ -633,9 +529,6 @@ export class City3DRenderer {
     this.scene.add(this.hijackRing);
   }
 
-  /**
-   * 1:1 Realistic Vehicle Proportions (in meters)
-   */
   createVehicle3D(v) {
     const group = new THREE.Group();
     const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
@@ -676,7 +569,6 @@ export class City3DRenderer {
     }
 
     if (v.id === "brtc") {
-      // Real 4.35m tall BRTC Double-Decker Bus
       const lowerDeck = new THREE.Mesh(
         new THREE.BoxGeometry(v.length, 1.85, v.width),
         bodyMat
@@ -707,7 +599,6 @@ export class City3DRenderer {
       windshield.position.set(v.length / 2, 3.25, 0);
       group.add(windshield);
     } else if (v.id === "mishuk") {
-      // Real 2.65m x 1.35m x 1.68m Mishuk Baby Taxi
       const chassis = new THREE.Mesh(
         new THREE.BoxGeometry(v.length * 0.86, 0.62, v.width),
         bodyMat
@@ -724,7 +615,6 @@ export class City3DRenderer {
       canopy.castShadow = true;
       group.add(canopy);
     } else if (v.id === "rickshaw") {
-      // Real 2.35m x 1.15m x 1.78m Cycle Rickshaw + Puller (1.68m standing/pedaling)
       const carriage = new THREE.Mesh(
         new THREE.BoxGeometry(v.length * 0.52, 0.55, v.width),
         bodyMat
@@ -755,7 +645,6 @@ export class City3DRenderer {
       pullerHead.position.set(0.48, 1.54, 0);
       group.add(pullerHead);
     } else {
-      // Real '92 Toyota Corolla DX (1.38m H) & DMP Patrol Jeep (1.88m H)
       const lowerH = v.id === "police" ? 0.85 : 0.62;
       const cabinH = v.id === "police" ? 0.72 : 0.52;
 
@@ -802,7 +691,6 @@ export class City3DRenderer {
       }
     }
 
-    // Headlights
     const hlMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
     for (const zOff of [-v.width * 0.32, v.width * 0.32]) {
       const hl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.24), hlMat);
