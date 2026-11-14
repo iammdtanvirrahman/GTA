@@ -17,6 +17,7 @@
  *       7. Functional Interactive Buildings (Auto Workshop, Hotel Niribili Safehouse, Dhaka Care Clinic)
  */
 import * as THREE from "three";
+import { createRealWorldDhakaLandmark } from "./realWorldDhakaLandmarks.js";
 import {
   getApartmentFacadeTexture,
   getApartmentEmissiveTexture,
@@ -725,6 +726,7 @@ export function createFunctionalBuildingAsset(fb, batcher) {
  * while feeding repetitive details into the GPU InstancedMesh batcher.
  */
 export function buildDetailedBuildingAsset(item, batcher = null) {
+  if (item.landmark) return createRealWorldDhakaLandmark(item.landmark, item);
   if (item.role) return createFunctionalBuildingAsset(item, batcher);
   if (item.style === "station") return createRailwayStationAsset(item);
   if (item.style === "hangar") return createAirportHangarAsset(item, batcher);
