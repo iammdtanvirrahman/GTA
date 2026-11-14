@@ -29,11 +29,11 @@ body {
 
 .hud-panel {
   position: fixed;
-  background: rgba(13, 17, 23, 0.86);
+  background: rgba(13, 17, 23, 0.88);
   border: 1px solid #30363d;
   border-radius: 6px;
   backdrop-filter: blur(6px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   z-index: 10;
 }
 
@@ -42,6 +42,7 @@ body {
   left: 14px;
   padding: 10px 14px;
   border-left: 3px solid #f59e0b;
+  min-width: 245px;
 }
 
 .hud-badge {
@@ -68,6 +69,60 @@ body {
   font-size: 11px;
   color: #8b949e;
   margin-top: 2px;
+}
+
+.hud-bars {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #8b949e;
+  width: 30px;
+}
+
+.bar-track {
+  flex: 1;
+  height: 7px;
+  background: #21262d;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  transition: width 0.1s linear;
+}
+
+.hp-fill {
+  background: #2ea043;
+}
+
+.stam-fill {
+  background: #f59e0b;
+}
+
+.hud-vehicle {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #21262d;
+  font-size: 11px;
+  color: #e6edf3;
+}
+
+.hud-vehicle.driving {
+  color: #f59e0b;
+  font-weight: 700;
 }
 
 .hud-top-right {
@@ -117,11 +172,11 @@ kbd {
   display: none;
   position: fixed;
   bottom: 24px;
-  right: 24px;
-  width: 104px;
-  height: 104px;
+  left: 24px;
+  width: 108px;
+  height: 108px;
   border-radius: 50%;
-  background: rgba(22, 27, 34, 0.72);
+  background: rgba(22, 27, 34, 0.78);
   border: 1px solid #30363d;
   z-index: 12;
   touch-action: none;
@@ -129,8 +184,8 @@ kbd {
 
 .touch-knob {
   position: absolute;
-  top: 32px;
-  left: 32px;
+  top: 34px;
+  left: 34px;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -138,11 +193,40 @@ kbd {
   pointer-events: none;
 }
 
+.mobile-actions {
+  display: none;
+  position: fixed;
+  bottom: 28px;
+  right: 20px;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 12;
+}
+
+.mobile-btn {
+  background: rgba(22, 27, 34, 0.88);
+  color: #f0f6fc;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  touch-action: manipulation;
+}
+
+.mobile-btn.primary {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
 @media (max-width: 768px) {
   .hud-top-left {
     top: 10px;
     left: 10px;
     padding: 8px 10px;
+    min-width: 195px;
   }
   .hud-title {
     font-size: 14px;
@@ -153,13 +237,16 @@ kbd {
     padding: 5px;
   }
   #minimapCanvas {
-    width: 126px;
-    height: 126px;
+    width: 122px;
+    height: 122px;
   }
   .hud-bottom-left {
     display: none;
   }
   .touch-zone {
     display: block;
+  }
+  .mobile-actions {
+    display: flex;
   }
 }

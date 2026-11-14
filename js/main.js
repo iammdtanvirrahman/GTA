@@ -1,5 +1,8 @@
 import { MAP_CONFIG, ZONES } from "./tejgaonMapData.js";
 import { CityRenderer } from "./cityRenderer.js";
+import { buildStaticColliders, resolveEntityCollisions } from "./physics.js";
+import { Player } from "./player.js";
+import { spawnTejgaonTraffic } from "./vehicles.js";
 
 const canvas = document.getElementById("cityCanvas");
 const ctx = canvas.getContext("2d");
@@ -9,21 +12,20 @@ const minimapCtx = minimapCanvas.getContext("2d");
 const zoneLabel = document.getElementById("zoneLabel");
 const coordLabel = document.getElementById("coordLabel");
 const zoomLabel = document.getElementById("zoomLabel");
+const speedLabel = document.getElementById("speedLabel");
+const healthBar = document.getElementById("healthBar");
+const staminaBar = document.getElementById("staminaBar");
+const vehicleStatus = document.getElementById("vehicleStatus");
 
 const renderer = new CityRenderer();
-
-// Scout entity (Step 1 free-roam observer; will become player/vehicle controller in Step 2)
-const scout = {
-  x: MAP_CONFIG.spawn.x,
-  y: MAP_CONFIG.spawn.y,
-  speed: 440,
-  angle: -Math.PI / 2
-};
+const colliders = buildStaticColliders(renderer.urbanFill.blocks);
+const player = new Player(MAP_CONFIG.spawn.x, MAP_CONFIG.spawn.y);
+const vehicles = spawnTejgaonTraffic();
 
 const camera = {
-  x: scout.x,
-  y: scout.y,
-  zoom: 0.85,
+  x: player.x,
+  y: player.y,
+  zoom: 0.95,
   freePan: false
 };
 
@@ -31,6 +33,7 @@ const keys = new Set();
 let isDragging = false;
 let dragStart = { x: 0, y: 0 };
 let touchVec = { x: 0, y: 0 };
+let mobileSprint = false;
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -42,6 +45,12 @@ resize();
 // Keyboard input
 window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
+
+  if (!keys.has(k) && (k === "f" || e.code === "Enter")) {
+    player.tryToggleVehicle(vehicles);
+    camera.freePan = false;
+  }
+
   keys.add(k);
 
   if (e.code === "Space") {
@@ -49,7 +58,7 @@ window.addEventListener("keydown", (e) => {
   } else if (k === "=" || k === "+") {
     camera.zoom = Math.min(2.2, camera.zoom + 0.12);
   } else if (k === "-" || k === "_") {
-    camera.zoom = Math.max(0.32, camera.zoom - 0.12);
+    camera.zoom = Math.max(0.35, camera.zoom - 0.12);
   }
 });
 
@@ -63,7 +72,7 @@ canvas.addEventListener(
   (e) => {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    camera.zoom = Math.max(0.32, Math.min(2.2, camera.zoom * factor));
+    camera.zoom = Math.max(0.35, Math.min(2.2, camera.zoom * factor));
   },
   { passive: false }
 );
@@ -91,9 +100,11 @@ window.addEventListener("mouseup", () => {
   isDragging = false;
 });
 
-// Mobile Touch Joystick
+// Mobile Touch Joystick & Action Buttons
 const touchZone = document.getElementById("touchZone");
 const touchKnob = document.getElementById("touchKnob");
+const btnSprint = document.getElementById("btnSprint");
+const btnEnterExit = document.getElementById("btnEnterExit");
 
 touchZone.addEventListener("touchmove", (e) => {
   e.preventDefault();
@@ -118,22 +129,61 @@ touchZone.addEventListener("touchend", () => {
   touchVec = { x: 0, y: 0 };
 });
 
+btnSprint.addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  mobileSprint = true;
+});
+btnSprint.addEventListener("touchend", () => {
+  mobileSprint = false;
+});
+btnEnterExit.addEventListener("click", () => {
+  player.tryToggleVehicle(vehicles);
+  camera.freePan = false;
+});
+
+function gatherInput() {
+  let moveX = touchVec.x;
+  let moveY = touchVec.y;
+  if (keys.has("w") || keys.has("arrowup")) moveY -= 1;
+  if (keys.has("s") || keys.has("arrowdown")) moveY += 1;
+  if (keys.has("a") || keys.has("arrowleft")) moveX -= 1;
+  if (keys.has("d") || keys.has("arrowright")) moveX += 1;
+
+  return {
+    moveX,
+    moveY,
+    sprint: keys.has("shift") || mobileSprint
+  };
+}
+
 function updateHUD() {
-  // Interpolate real GPS coordinates for Tejgaon
   const { minLat, maxLat, minLng, maxLng } = MAP_CONFIG.bounds;
-  const lat = maxLat - (scout.y / MAP_CONFIG.height) * (maxLat - minLat);
-  const lng = minLng + (scout.x / MAP_CONFIG.width) * (maxLng - minLng);
+  const lat = maxLat - (player.y / MAP_CONFIG.height) * (maxLat - minLat);
+  const lng = minLng + (player.x / MAP_CONFIG.width) * (maxLng - minLng);
   coordLabel.textContent = `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
   zoomLabel.textContent = `${camera.zoom.toFixed(2)}x`;
 
-  // Detect active Tejgaon sub-zone
+  healthBar.style.width = `${(player.health / player.maxHealth) * 100}%`;
+  staminaBar.style.width = `${(player.stamina / player.maxStamina) * 100}%`;
+
+  if (player.inVehicle) {
+    const kmh = Math.round(Math.abs(player.inVehicle.speed) * 0.22);
+    speedLabel.textContent = `${kmh} KM/H`;
+    vehicleStatus.textContent = `DRIVING: ${player.inVehicle.name}`;
+    vehicleStatus.classList.add("driving");
+  } else {
+    speedLabel.textContent = "ON FOOT";
+    vehicleStatus.textContent = "ON FOOT • Press [F] near vehicle";
+    vehicleStatus.classList.remove("driving");
+  }
+
   let currentZone = "Tejgaon Sector (Dhaka)";
   for (const z of ZONES) {
     if (
-      scout.x >= z.x &&
-      scout.x <= z.x + z.w &&
-      scout.y >= z.y &&
-      scout.y <= z.y + z.h
+      player.x >= z.x &&
+      player.x <= z.x + z.w &&
+      player.y >= z.y &&
+      player.y <= z.y + z.h
     ) {
       currentZone = z.name;
       break;
@@ -147,30 +197,30 @@ function loop(now) {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
 
-  let vx = touchVec.x;
-  let vy = touchVec.y;
-  if (keys.has("w") || keys.has("arrowup")) vy -= 1;
-  if (keys.has("s") || keys.has("arrowdown")) vy += 1;
-  if (keys.has("a") || keys.has("arrowleft")) vx -= 1;
-  if (keys.has("d") || keys.has("arrowright")) vx += 1;
+  const input = gatherInput();
 
-  const mag = Math.hypot(vx, vy);
-  if (mag > 0) {
-    vx /= mag;
-    vy /= mag;
-    scout.x = Math.max(30, Math.min(MAP_CONFIG.width - 30, scout.x + vx * scout.speed * dt));
-    scout.y = Math.max(30, Math.min(MAP_CONFIG.height - 30, scout.y + vy * scout.speed * dt));
-    scout.angle = Math.atan2(vy, vx);
+  // Update vehicles first so player stays locked to vehicle coordinates when driving
+  for (const v of vehicles) {
+    v.update(dt, input, colliders, vehicles);
+  }
+
+  player.update(dt, input, colliders);
+  resolveEntityCollisions(player, vehicles);
+
+  if (input.moveX !== 0 || input.moveY !== 0) {
     camera.freePan = false;
   }
 
   if (!camera.freePan) {
-    camera.x += (scout.x - camera.x) * 8 * dt;
-    camera.y += (scout.y - camera.y) * 8 * dt;
+    // Dynamic camera lead when driving fast
+    const leadX = player.inVehicle ? player.inVehicle.vx * 0.22 : 0;
+    const leadY = player.inVehicle ? player.inVehicle.vy * 0.22 : 0;
+    camera.x += (player.x + leadX - camera.x) * 8 * dt;
+    camera.y += (player.y + leadY - camera.y) * 8 * dt;
   }
 
-  renderer.renderWorld(ctx, camera, scout);
-  renderer.renderMinimap(minimapCtx, camera, scout);
+  renderer.renderWorld(ctx, camera, player, vehicles);
+  renderer.renderMinimap(minimapCtx, camera, player, vehicles);
   updateHUD();
 
   requestAnimationFrame(loop);

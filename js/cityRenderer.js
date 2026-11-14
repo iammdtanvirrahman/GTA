@@ -20,7 +20,6 @@ function generateUrbanFill() {
     return (seed - 1) / 2147483646;
   };
 
-  // Scatter dense Tejgaon tin-shed workshops, godowns, and apartment blocks
   for (let gx = 160; gx < MAP_CONFIG.width - 180; gx += 135) {
     for (let gy = 140; gy < MAP_CONFIG.height - 160; gy += 135) {
       if (rand() < 0.28) continue;
@@ -44,7 +43,6 @@ function generateUrbanFill() {
     }
   }
 
-  // Scatter roadside & Hatirjheel greenery
   for (let i = 0; i < 420; i++) {
     const tx = 100 + rand() * (MAP_CONFIG.width - 200);
     const ty = 100 + rand() * (MAP_CONFIG.height - 200);
@@ -68,7 +66,6 @@ function distToSegment(px, py, x1, y1, x2, y2) {
 }
 
 function isNearRoadOrWater(x, y, margin) {
-  // Check roads
   for (const road of ROADS) {
     for (let i = 0; i < road.points.length - 1; i++) {
       const p1 = road.points[i];
@@ -78,7 +75,6 @@ function isNearRoadOrWater(x, y, margin) {
       }
     }
   }
-  // Check railway
   for (let i = 0; i < RAILWAY_LINE.points.length - 1; i++) {
     const p1 = RAILWAY_LINE.points[i];
     const p2 = RAILWAY_LINE.points[i + 1];
@@ -86,9 +82,7 @@ function isNearRoadOrWater(x, y, margin) {
       return true;
     }
   }
-  // Check Hatirjheel water bounding area
   if (x > 2820 && y > 1050 && y < 2900) return true;
-  // Check Old Airport Runway area
   if (x > 420 && x < 1780 && y > 280 && y < 1850) return true;
 
   return false;
@@ -99,20 +93,17 @@ export class CityRenderer {
     this.urbanFill = generateUrbanFill();
   }
 
-  renderWorld(ctx, camera, scout) {
+  renderWorld(ctx, camera, player, vehicles) {
     const { width, height } = ctx.canvas;
     ctx.save();
 
-    // Base ground (90s dusty Dhaka urban earth/concrete)
     ctx.fillStyle = "#181d24";
     ctx.fillRect(0, 0, width, height);
 
-    // Camera transform
     ctx.translate(width / 2, height / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.x, -camera.y);
 
-    // World boundary base
     ctx.fillStyle = "#1b2129";
     ctx.fillRect(0, 0, MAP_CONFIG.width, MAP_CONFIG.height);
 
@@ -122,10 +113,20 @@ export class CityRenderer {
     this.drawRoads(ctx);
     this.drawRailway(ctx);
     this.drawLandmarks(ctx);
-    this.drawTrees(ctx);
-    this.drawScout(ctx, scout);
 
-    // Outer city border
+    // Draw player on foot & all 90s vehicles
+    player.draw(ctx);
+    for (const v of vehicles) {
+      v.draw(ctx);
+    }
+
+    // Highlight nearest hijackable vehicle when player is on foot
+    if (!player.inVehicle) {
+      this.drawHijackPrompt(ctx, player, vehicles);
+    }
+
+    this.drawTrees(ctx);
+
     ctx.strokeStyle = "#f59e0b";
     ctx.lineWidth = 6;
     ctx.strokeRect(0, 0, MAP_CONFIG.width, MAP_CONFIG.height);
@@ -133,17 +134,43 @@ export class CityRenderer {
     ctx.restore();
   }
 
+  drawHijackPrompt(ctx, player, vehicles) {
+    let nearest = null;
+    let bestDist = 68;
+    for (const v of vehicles) {
+      const d = Math.hypot(v.x - player.x, v.y - player.y);
+      if (d < bestDist) {
+        bestDist = d;
+        nearest = v;
+      }
+    }
+    if (!nearest) return;
+
+    ctx.save();
+    ctx.strokeStyle = "#f59e0b";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.arc(nearest.x, nearest.y, nearest.length * 0.65, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = "rgba(13, 17, 23, 0.88)";
+    ctx.fillRect(nearest.x - 52, nearest.y - 44, 104, 18);
+    ctx.fillStyle = "#f59e0b";
+    ctx.font = "bold 11px Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("[F] HIJACK", nearest.x, nearest.y - 31);
+    ctx.restore();
+  }
+
   drawZones(ctx) {
     for (const z of ZONES) {
-      if (z.type === "airfield") {
-        ctx.fillStyle = "#1e2a23";
-      } else if (z.type === "industrial") {
-        ctx.fillStyle = "#1f232b";
-      } else if (z.type === "commercial") {
-        ctx.fillStyle = "#242129";
-      } else {
-        ctx.fillStyle = "#1c2429";
-      }
+      if (z.type === "airfield") ctx.fillStyle = "#1e2a23";
+      else if (z.type === "industrial") ctx.fillStyle = "#1f232b";
+      else if (z.type === "commercial") ctx.fillStyle = "#242129";
+      else ctx.fillStyle = "#1c2429";
+
       ctx.fillRect(z.x, z.y, z.w, z.h);
       ctx.strokeStyle = "rgba(255,255,255,0.05)";
       ctx.lineWidth = 2;
@@ -166,7 +193,6 @@ export class CityRenderer {
       ctx.strokeStyle = "#26333d";
       ctx.stroke();
 
-      // Water label
       const cx = water.points.reduce((acc, p) => acc + p.x, 0) / water.points.length;
       const cy = water.points.reduce((acc, p) => acc + p.y, 0) / water.points.length;
       ctx.fillStyle = "#58a6ff";
@@ -179,15 +205,12 @@ export class CityRenderer {
 
   drawUrbanBlocks(ctx) {
     for (const b of this.urbanFill.blocks) {
-      // Drop shadow
       ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
       ctx.fillRect(b.x + 5, b.y + 5, b.w, b.h);
 
-      // Rooftop
       ctx.fillStyle = b.color;
       ctx.fillRect(b.x, b.y, b.w, b.h);
 
-      // Corrugated tin / concrete rooftop texture
       if (b.roofStripe) {
         ctx.strokeStyle = "rgba(255,255,255,0.06)";
         ctx.lineWidth = 2;
@@ -200,7 +223,6 @@ export class CityRenderer {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    // Pass 1: Sidewalk / Curb shoulder
     for (const road of ROADS) {
       ctx.beginPath();
       road.points.forEach((pt, i) => {
@@ -212,7 +234,6 @@ export class CityRenderer {
       ctx.stroke();
     }
 
-    // Pass 2: Asphalt surface
     for (const road of ROADS) {
       ctx.beginPath();
       road.points.forEach((pt, i) => {
@@ -224,7 +245,6 @@ export class CityRenderer {
       ctx.stroke();
     }
 
-    // Pass 3: Lane dividers & Road Labels
     for (const road of ROADS) {
       ctx.save();
       ctx.beginPath();
@@ -238,7 +258,6 @@ export class CityRenderer {
       ctx.stroke();
       ctx.restore();
 
-      // Draw road name along midpoint segment
       const midIdx = Math.floor(road.points.length / 2);
       const pA = road.points[Math.max(0, midIdx - 1)];
       const pB = road.points[midIdx];
@@ -261,14 +280,12 @@ export class CityRenderer {
     const pts = RAILWAY_LINE.points;
     ctx.save();
 
-    // Gravel ballast bed
     ctx.beginPath();
     pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
     ctx.strokeStyle = "#3d352e";
     ctx.lineWidth = 28;
     ctx.stroke();
 
-    // Wooden sleepers
     ctx.beginPath();
     pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
     ctx.setLineDash([4, 10]);
@@ -276,7 +293,6 @@ export class CityRenderer {
     ctx.lineWidth = 22;
     ctx.stroke();
 
-    // Twin steel rails
     ctx.setLineDash([]);
     for (const offset of [-6, 6]) {
       ctx.beginPath();
@@ -296,14 +312,12 @@ export class CityRenderer {
       ctx.save();
 
       if (lm.style === "runway") {
-        // Tejgaon Old Airport Tarmac Strip
         ctx.fillStyle = "#2b3038";
         ctx.fillRect(lm.x, lm.y, lm.w, lm.h);
         ctx.strokeStyle = "#8b949e";
         ctx.lineWidth = 3;
         ctx.strokeRect(lm.x + 6, lm.y + 6, lm.w - 12, lm.h - 12);
 
-        // Centerline dashes
         ctx.beginPath();
         ctx.setLineDash([34, 28]);
         ctx.moveTo(lm.x + lm.w / 2, lm.y + 30);
@@ -313,7 +327,6 @@ export class CityRenderer {
         ctx.stroke();
         ctx.setLineDash([]);
       } else {
-        // Building shadow
         ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
         ctx.fillRect(lm.x + 8, lm.y + 8, lm.w, lm.h);
 
@@ -335,7 +348,6 @@ export class CityRenderer {
         ctx.strokeRect(lm.x, lm.y, lm.w, lm.h);
       }
 
-      // Landmark sign tag
       ctx.fillStyle = "#f0f6fc";
       ctx.font = "bold 14px Consolas, monospace";
       ctx.textAlign = "center";
@@ -349,50 +361,16 @@ export class CityRenderer {
     for (const t of this.urbanFill.trees) {
       ctx.beginPath();
       ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2);
-      ctx.fillStyle = "#1f472e";
+      ctx.fillStyle = "rgba(31, 71, 46, 0.85)";
       ctx.fill();
       ctx.beginPath();
       ctx.arc(t.x - 3, t.y - 3, t.r * 0.65, 0, Math.PI * 2);
-      ctx.fillStyle = "#2b633f";
+      ctx.fillStyle = "rgba(43, 99, 63, 0.9)";
       ctx.fill();
     }
   }
 
-  drawScout(ctx, scout) {
-    ctx.save();
-    ctx.translate(scout.x, scout.y);
-    ctx.rotate(scout.angle);
-
-    // Direction cone
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, 42, -0.35, 0.35);
-    ctx.closePath();
-    ctx.fillStyle = "rgba(245, 158, 11, 0.18)";
-    ctx.fill();
-
-    // Scout marker body
-    ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, Math.PI * 2);
-    ctx.fillStyle = "#f59e0b";
-    ctx.fill();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "#0d1117";
-    ctx.stroke();
-
-    // Heading pointer
-    ctx.beginPath();
-    ctx.moveTo(16, 0);
-    ctx.lineTo(6, -6);
-    ctx.lineTo(6, 6);
-    ctx.closePath();
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
-
-    ctx.restore();
-  }
-
-  renderMinimap(minimapCtx, camera, scout) {
+  renderMinimap(minimapCtx, camera, player, vehicles) {
     const mw = minimapCtx.canvas.width;
     const mh = minimapCtx.canvas.height;
     const sx = mw / MAP_CONFIG.width;
@@ -402,7 +380,6 @@ export class CityRenderer {
     minimapCtx.fillStyle = "#11161d";
     minimapCtx.fillRect(0, 0, mw, mh);
 
-    // Waterbodies on minimap
     for (const water of WATER_BODIES) {
       minimapCtx.beginPath();
       water.points.forEach((p, i) => {
@@ -414,7 +391,6 @@ export class CityRenderer {
       minimapCtx.fill();
     }
 
-    // Roads on minimap
     minimapCtx.strokeStyle = "#6e7681";
     minimapCtx.lineWidth = 2;
     for (const road of ROADS) {
@@ -426,7 +402,6 @@ export class CityRenderer {
       minimapCtx.stroke();
     }
 
-    // Railway on minimap
     minimapCtx.strokeStyle = "#d29922";
     minimapCtx.lineWidth = 1.5;
     minimapCtx.beginPath();
@@ -436,7 +411,12 @@ export class CityRenderer {
     });
     minimapCtx.stroke();
 
-    // Camera viewport rectangle
+    // Vehicle blips on radar
+    for (const v of vehicles) {
+      minimapCtx.fillStyle = v.id === "police" ? "#3b82f6" : "#9ca3af";
+      minimapCtx.fillRect(v.x * sx - 1.5, v.y * sy - 1.5, 3, 3);
+    }
+
     const viewW = (window.innerWidth / camera.zoom) * sx;
     const viewH = (window.innerHeight / camera.zoom) * sy;
     minimapCtx.strokeStyle = "rgba(88, 166, 255, 0.7)";
@@ -448,9 +428,9 @@ export class CityRenderer {
       viewH
     );
 
-    // Scout dot
+    // Player dot
     minimapCtx.beginPath();
-    minimapCtx.arc(scout.x * sx, scout.y * sy, 3.5, 0, Math.PI * 2);
+    minimapCtx.arc(player.x * sx, player.y * sy, 3.5, 0, Math.PI * 2);
     minimapCtx.fillStyle = "#f59e0b";
     minimapCtx.fill();
   }

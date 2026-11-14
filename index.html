@@ -3,39 +3,57 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>DHAKA '96 — Tejgaon Map Prototype</title>
+  <title>DHAKA '96 — Tejgaon Sector (Step 2: Physics & Vehicles)</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <canvas id="cityCanvas"></canvas>
 
-  <!-- Top-Left District & Coordinate Telemetry -->
+  <!-- Top-Left District, Player & Vehicle Telemetry -->
   <div class="hud-panel hud-top-left">
-    <div class="hud-badge">STEP 01 // MAP MODULE</div>
+    <div class="hud-badge">STEP 02 // PHYSICS &amp; 90s TRAFFIC</div>
     <h1 class="hud-title">TEJGAON SECTOR</h1>
     <div id="zoneLabel" class="hud-zone">Tejgaon Industrial Area</div>
     <div id="coordLabel" class="hud-coords">23.7638° N, 90.3982° E</div>
+
+    <div class="hud-bars">
+      <div class="bar-row">
+        <span class="bar-label">HP</span>
+        <div class="bar-track"><div id="healthBar" class="bar-fill hp-fill" style="width: 100%"></div></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">STAM</span>
+        <div class="bar-track"><div id="staminaBar" class="bar-fill stam-fill" style="width: 100%"></div></div>
+      </div>
+    </div>
+
+    <div id="vehicleStatus" class="hud-vehicle">ON FOOT &bull; Press [F] near vehicle</div>
   </div>
 
   <!-- Top-Right Minimap Radar -->
   <div class="hud-panel hud-top-right">
     <canvas id="minimapCanvas" width="190" height="190"></canvas>
     <div class="minimap-footer">
-      <span>RADAR: TEJGAON</span>
-      <span id="zoomLabel">1.00x</span>
+      <span id="speedLabel">0 KM/H</span>
+      <span id="zoomLabel">0.95x</span>
     </div>
   </div>
 
   <!-- Bottom-Left Controls Legend -->
   <div class="hud-panel hud-bottom-left">
-    <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> Move Scout</div>
-    <div><kbd>Scroll</kbd> / <kbd>+ -</kbd> Zoom</div>
-    <div><kbd>Right-Drag</kbd> Free Pan &bull; <kbd>Space</kbd> Center</div>
+    <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> Move / Drive</div>
+    <div><kbd>Shift</kbd> Sprint / Handbrake</div>
+    <div><kbd>F</kbd> / <kbd>Enter</kbd> Hijack or Exit Vehicle</div>
+    <div><kbd>Scroll</kbd> Zoom &bull; <kbd>Right-Drag</kbd> Pan &bull; <kbd>Space</kbd> Center</div>
   </div>
 
-  <!-- Mobile Touch Joystick -->
+  <!-- Mobile Touch Controls -->
   <div id="touchZone" class="touch-zone" aria-hidden="true">
     <div id="touchKnob" class="touch-knob"></div>
+  </div>
+  <div class="mobile-actions">
+    <button id="btnSprint" class="mobile-btn" type="button">SPRINT</button>
+    <button id="btnEnterExit" class="mobile-btn primary" type="button">ENTER / EXIT</button>
   </div>
 
   <script type="module" src="js/main.js"></script>
