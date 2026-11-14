@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>DHAKA '96 — Tejgaon Map Prototype</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <canvas id="cityCanvas"></canvas>
+
+  <!-- Top-Left District & Coordinate Telemetry -->
+  <div class="hud-panel hud-top-left">
+    <div class="hud-badge">STEP 01 // MAP MODULE</div>
+    <h1 class="hud-title">TEJGAON SECTOR</h1>
+    <div id="zoneLabel" class="hud-zone">Tejgaon Industrial Area</div>
+    <div id="coordLabel" class="hud-coords">23.7638° N, 90.3982° E</div>
+  </div>
+
+  <!-- Top-Right Minimap Radar -->
+  <div class="hud-panel hud-top-right">
+    <canvas id="minimapCanvas" width="190" height="190"></canvas>
+    <div class="minimap-footer">
+      <span>RADAR: TEJGAON</span>
+      <span id="zoomLabel">1.00x</span>
+    </div>
+  </div>
+
+  <!-- Bottom-Left Controls Legend -->
+  <div class="hud-panel hud-bottom-left">
+    <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> Move Scout</div>
+    <div><kbd>Scroll</kbd> / <kbd>+ -</kbd> Zoom</div>
+    <div><kbd>Right-Drag</kbd> Free Pan &bull; <kbd>Space</kbd> Center</div>
+  </div>
+
+  <!-- Mobile Touch Joystick -->
+  <div id="touchZone" class="touch-zone" aria-hidden="true">
+    <div id="touchKnob" class="touch-knob"></div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
