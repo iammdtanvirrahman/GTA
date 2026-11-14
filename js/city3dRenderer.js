@@ -45,7 +45,6 @@ export function generateUrbanLayout() {
 
       if (isNearRoadOrWater(bx + bw / 2, by + bh / 2, 24)) continue;
 
-      // Keep clear of dedicated functional buildings
       let overlapsFunctional = false;
       for (const fb of functionalParcels) {
         if (
@@ -146,6 +145,8 @@ export class City3DRenderer {
     );
 
     this.vehicleMeshes = new Map();
+    this.trainCarMeshes = [];
+    this.trainSmokePuffs = [];
     this.sirenLights = [];
     this.waterMeshes = [];
     this.lodBuildings = [];
@@ -160,6 +161,7 @@ export class City3DRenderer {
     this.buildTreesInstanced();
     this.buildPlayerMesh();
     this.buildHijackRing();
+    this.buildBangladeshRailwayTrainMeshes();
 
     this.functionalBuildings = new FunctionalBuildingManager(this.scene);
   }
@@ -619,6 +621,245 @@ export class City3DRenderer {
     this.scene.add(this.hijackRing);
   }
 
+  /**
+   * Builds 1990s Bangladesh Railway Class 2700 Diesel-Electric Locomotive + 5 Passenger Coaches
+   */
+  buildBangladeshRailwayTrainMeshes() {
+    const brGreenMat = new THREE.MeshStandardMaterial({
+      color: 0x14532d,
+      roughness: 0.48,
+      metalness: 0.2
+    });
+    const coachGreenMat = new THREE.MeshStandardMaterial({
+      color: 0x166534,
+      roughness: 0.52,
+      metalness: 0.15
+    });
+    const goldStripeMat = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b,
+      roughness: 0.4
+    });
+    const creamStripeMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      roughness: 0.45
+    });
+    const roofSilverMat = new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      roughness: 0.42,
+      metalness: 0.55
+    });
+    const bufferRedMat = new THREE.MeshStandardMaterial({
+      color: 0xdc2626,
+      roughness: 0.5
+    });
+    const bogieMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.85,
+      metalness: 0.4
+    });
+    const cabGlassMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      roughness: 0.15,
+      metalness: 0.85
+    });
+    const litWindowMat = new THREE.MeshStandardMaterial({
+      color: 0xfef3c7,
+      emissive: 0xfde047,
+      emissiveIntensity: 0.85,
+      roughness: 0.2
+    });
+    const headlightMat = new THREE.MeshBasicMaterial({ color: 0xfef9c3 });
+    const tailLightMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+
+    // 1. Locomotive (Index 0)
+    const locoGroup = new THREE.Group();
+    const locoLen = 16.5;
+    const locoW = 2.85;
+
+    // Underframe & bogies
+    const underframe = new THREE.Mesh(
+      new THREE.BoxGeometry(locoLen, 0.45, locoW),
+      bogieMat
+    );
+    underframe.position.y = 0.75;
+    underframe.castShadow = true;
+    locoGroup.add(underframe);
+
+    for (const bx of [-5.2, 5.2]) {
+      const bogie = new THREE.Mesh(
+        new THREE.BoxGeometry(3.8, 0.52, locoW - 0.35),
+        bogieMat
+      );
+      bogie.position.set(bx, 0.36, 0);
+      locoGroup.add(bogie);
+    }
+
+    // Front & rear red buffer beams
+    for (const endX of [locoLen / 2 + 0.1, -locoLen / 2 - 0.1]) {
+      const beam = new THREE.Mesh(
+        new THREE.BoxGeometry(0.28, 0.55, locoW + 0.1),
+        bufferRedMat
+      );
+      beam.position.set(endX, 0.78, 0);
+      locoGroup.add(beam);
+    }
+
+    // Main long engine hood
+    const hood = new THREE.Mesh(
+      new THREE.BoxGeometry(10.8, 2.25, locoW - 0.42),
+      brGreenMat
+    );
+    hood.position.set(1.8, 2.05, 0);
+    hood.castShadow = true;
+    locoGroup.add(hood);
+
+    // Golden-amber BR livery stripe along engine hood
+    const hoodStripe = new THREE.Mesh(
+      new THREE.BoxGeometry(10.86, 0.36, locoW - 0.36),
+      goldStripeMat
+    );
+    hoodStripe.position.set(1.8, 1.55, 0);
+    locoGroup.add(hoodStripe);
+
+    // Elevated driver cab
+    const cab = new THREE.Mesh(
+      new THREE.BoxGeometry(3.6, 2.75, locoW - 0.08),
+      brGreenMat
+    );
+    cab.position.set(-5.2, 2.32, 0);
+    cab.castShadow = true;
+    locoGroup.add(cab);
+
+    const cabRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(3.85, 0.24, locoW + 0.06),
+      roofSilverMat
+    );
+    cabRoof.position.set(-5.2, 3.75, 0);
+    locoGroup.add(cabRoof);
+
+    const cabWindows = new THREE.Mesh(
+      new THREE.BoxGeometry(3.66, 0.85, locoW - 0.02),
+      cabGlassMat
+    );
+    cabWindows.position.set(-5.2, 2.95, 0);
+    locoGroup.add(cabWindows);
+
+    // Dual front headlights + illuminated number board
+    const upperLamp = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.22, 0.16, 12),
+      headlightMat
+    );
+    upperLamp.rotation.z = Math.PI / 2;
+    upperLamp.position.set(7.24, 2.95, 0);
+    locoGroup.add(upperLamp);
+
+    for (const zOff of [-0.72, 0.72]) {
+      const lowerLamp = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.16, 0.16, 0.16, 10),
+        headlightMat
+      );
+      lowerLamp.rotation.z = Math.PI / 2;
+      lowerLamp.position.set(7.24, 1.48, zOff);
+      locoGroup.add(lowerLamp);
+    }
+
+    // Exhaust stack
+    const stack = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.24, 0.28, 0.45, 10),
+      bogieMat
+    );
+    stack.position.set(0.4, 3.35, 0);
+    locoGroup.add(stack);
+
+    this.scene.add(locoGroup);
+    this.trainCarMeshes.push(locoGroup);
+
+    // Diesel exhaust smoke particles
+    const smokeGeo = new THREE.DodecahedronGeometry(0.42, 1);
+    const smokeMat = new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      transparent: true,
+      opacity: 0.45,
+      roughness: 1.0
+    });
+    for (let s = 0; s < 10; s++) {
+      const puff = new THREE.Mesh(smokeGeo, smokeMat);
+      puff.userData.phase = s / 10;
+      this.scene.add(puff);
+      this.trainSmokePuffs.push(puff);
+    }
+
+    // 2. Five Passenger Coaches (Indices 1..5)
+    const coachLen = 17.5;
+    for (let c = 0; c < 5; c++) {
+      const coachGroup = new THREE.Group();
+
+      const chassis = new THREE.Mesh(
+        new THREE.BoxGeometry(coachLen, 0.36, locoW),
+        bogieMat
+      );
+      chassis.position.y = 0.72;
+      coachGroup.add(chassis);
+
+      for (const bx of [-5.8, 5.8]) {
+        const bogie = new THREE.Mesh(
+          new THREE.BoxGeometry(2.8, 0.48, locoW - 0.35),
+          bogieMat
+        );
+        bogie.position.set(bx, 0.34, 0);
+        coachGroup.add(bogie);
+      }
+
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(coachLen, 2.38, locoW),
+        coachGreenMat
+      );
+      body.position.y = 2.08;
+      body.castShadow = true;
+      coachGroup.add(body);
+
+      const waistStripe = new THREE.Mesh(
+        new THREE.BoxGeometry(coachLen + 0.04, 0.26, locoW + 0.05),
+        creamStripeMat
+      );
+      waistStripe.position.y = 1.68;
+      coachGroup.add(waistStripe);
+
+      const roof = new THREE.Mesh(
+        new THREE.BoxGeometry(coachLen + 0.14, 0.34, locoW + 0.08),
+        roofSilverMat
+      );
+      roof.position.y = 3.42;
+      roof.castShadow = true;
+      coachGroup.add(roof);
+
+      // Warm glowing passenger window rows on both sides
+      for (let w = -6.8; w <= 6.8; w += 1.7) {
+        const win = new THREE.Mesh(
+          new THREE.BoxGeometry(1.05, 0.68, locoW + 0.06),
+          litWindowMat
+        );
+        win.position.set(w, 2.42, 0);
+        coachGroup.add(win);
+      }
+
+      // Red tail lamps on final coach
+      if (c === 4) {
+        for (const zOff of [-0.85, 0.85]) {
+          const tail = new THREE.Mesh(
+            new THREE.BoxGeometry(0.12, 0.22, 0.22),
+            tailLightMat
+          );
+          tail.position.set(-coachLen / 2 - 0.05, 1.45, zOff);
+          coachGroup.add(tail);
+        }
+      }
+
+      this.scene.add(coachGroup);
+      this.trainCarMeshes.push(coachGroup);
+    }
+  }
+
   createVehicle3D(v) {
     const group = new THREE.Group();
     const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
@@ -792,11 +1033,12 @@ export class City3DRenderer {
     return group;
   }
 
-  renderWorld(cameraState, player, vehicles, elapsed, spectator = null) {
+  renderWorld(cameraState, player, vehicles, elapsed, spectator = null, train = null) {
     const dt = Math.min(0.05, Math.max(0.001, elapsed - this._lastElapsed));
     this._lastElapsed = elapsed;
 
     const isSpectator = Boolean(spectator && spectator.active);
+    const isCinematic = Boolean(isSpectator && spectator.cinematic && spectator.cinematic.active);
 
     // Sync 3D Player Mesh (hidden in Spectator Mode)
     this.playerMesh.visible = !isSpectator && !player.inVehicle;
@@ -822,17 +1064,42 @@ export class City3DRenderer {
       mesh.rotation.y = -v.angle;
     }
 
+    // Sync Articulated Bangladesh Railway Train Meshes
+    if (train && train.cars) {
+      for (let i = 0; i < train.cars.length && i < this.trainCarMeshes.length; i++) {
+        const car = train.cars[i];
+        const carMesh = this.trainCarMeshes[i];
+        carMesh.position.set(car.x, 0.56, car.y);
+        carMesh.rotation.y = -car.angle;
+      }
+
+      // Update locomotive diesel exhaust smoke puffs
+      const loco = train.locomotive;
+      const throttle = train.speed > 0.5 ? 1.0 : 0.35;
+      for (let s = 0; s < this.trainSmokePuffs.length; s++) {
+        const puff = this.trainSmokePuffs[s];
+        const age = (elapsed * (0.65 + throttle * 0.55) + puff.userData.phase) % 1;
+        const backOffset = 0.4 - age * (3.5 + train.speed * 0.35);
+        puff.position.set(
+          loco.x + Math.cos(loco.angle) * backOffset,
+          4.15 + age * 2.8,
+          loco.y + Math.sin(loco.angle) * backOffset
+        );
+        const sc = 0.45 + age * 1.65;
+        puff.scale.set(sc, sc * 0.8, sc);
+      }
+    }
+
     // Determine active camera focus for LOD & shadow frustum
-    const focusX = isSpectator
-      ? spectator.followVehicle
-        ? spectator.followVehicle.x
-        : spectator.x
-      : cameraState.targetX;
-    const focusZ = isSpectator
-      ? spectator.followVehicle
-        ? spectator.followVehicle.y
-        : spectator.z
-      : cameraState.targetZ;
+    let focusX = cameraState.targetX;
+    let focusZ = cameraState.targetZ;
+    if (isCinematic) {
+      focusX = spectator.cinematic.lookX;
+      focusZ = spectator.cinematic.lookZ;
+    } else if (isSpectator) {
+      focusX = spectator.followVehicle ? spectator.followVehicle.x : spectator.x;
+      focusZ = spectator.followVehicle ? spectator.followVehicle.y : spectator.z;
+    }
 
     // Distance LOD Culling for building sub-details beyond 420m
     const lodRadiusSq = 420 * 420;
@@ -887,7 +1154,11 @@ export class City3DRenderer {
     this.sunLight.target.position.set(focusX, 0, focusZ);
     this.sunLight.target.updateMatrixWorld();
 
-    if (isSpectator && !spectator.followVehicle) {
+    if (isCinematic) {
+      const cin = spectator.cinematic;
+      this.camera.position.set(cin.camX, cin.camY, cin.camZ);
+      this.camera.lookAt(cin.lookX, cin.lookY, cin.lookZ);
+    } else if (isSpectator && !spectator.followVehicle) {
       // Free-Cam 3D Drone Spectator Camera
       this.camera.position.set(spectator.x, spectator.altitude, spectator.z);
       const cosP = Math.cos(spectator.pitch);
@@ -896,7 +1167,7 @@ export class City3DRenderer {
       const lookZ = spectator.z + Math.sin(spectator.yaw) * cosP * 40;
       this.camera.lookAt(lookX, lookY, lookZ);
     } else {
-      // Orbit / Chase Camera (used for AI Vehicle Follow in Spectator Mode or Player in Play Mode)
+      // Orbit / Chase Camera (used for AI Vehicle / Train Follow in Spectator Mode or Player in Play Mode)
       const dist = cameraState.distance;
       const pitch = cameraState.pitch;
       const yaw = cameraState.yaw;
@@ -907,13 +1178,13 @@ export class City3DRenderer {
       const camZ = cameraState.targetZ - Math.sin(yaw) * horiz;
 
       this.camera.position.set(camX, camY, camZ);
-      this.camera.lookAt(cameraState.targetX, 1.35, cameraState.targetZ);
+      this.camera.lookAt(cameraState.targetX, 1.65, cameraState.targetZ);
     }
 
     this.renderer.render(this.scene, this.camera);
   }
 
-  renderMinimap(minimapCtx, player, vehicles, spectator = null) {
+  renderMinimap(minimapCtx, player, vehicles, spectator = null, train = null) {
     this._minimapFrame = (this._minimapFrame + 1) % 3;
     if (this._minimapFrame !== 0) return;
 
@@ -957,6 +1228,19 @@ export class City3DRenderer {
     });
     minimapCtx.stroke();
 
+    // Draw moving Bangladesh Railway train consist on radar
+    if (train && train.cars) {
+      for (let i = train.cars.length - 1; i >= 0; i--) {
+        const car = train.cars[i];
+        minimapCtx.save();
+        minimapCtx.translate(car.x * sx, car.y * sy);
+        minimapCtx.rotate(car.angle);
+        minimapCtx.fillStyle = car.isLocomotive ? "#ef4444" : "#22c55e";
+        minimapCtx.fillRect(-1.8, -1.1, 3.6, 2.2);
+        minimapCtx.restore();
+      }
+    }
+
     if (this.functionalBuildings) {
       for (const z of this.functionalBuildings.zones) {
         minimapCtx.fillStyle = `#${z.color.toString(16).padStart(6, "0")}`;
@@ -972,10 +1256,20 @@ export class City3DRenderer {
     }
 
     if (spectator && spectator.active) {
-      const target = spectator.followVehicle;
-      const mx = (target ? target.x : spectator.x) * sx;
-      const my = (target ? target.y : spectator.z) * sy;
-      const yaw = target ? target.angle : spectator.yaw;
+      let mx;
+      let my;
+      let yaw;
+      if (spectator.cinematic && spectator.cinematic.active) {
+        const cin = spectator.cinematic;
+        mx = cin.camX * sx;
+        my = cin.camZ * sy;
+        yaw = Math.atan2(cin.lookZ - cin.camZ, cin.lookX - cin.camX);
+      } else {
+        const target = spectator.followVehicle;
+        mx = (target ? target.x : spectator.x) * sx;
+        my = (target ? target.y : spectator.z) * sy;
+        yaw = target ? target.angle : spectator.yaw;
+      }
 
       // Spectator FOV cone
       minimapCtx.save();
@@ -985,13 +1279,17 @@ export class City3DRenderer {
       minimapCtx.moveTo(0, 0);
       minimapCtx.arc(0, 0, 18, -0.45, 0.45);
       minimapCtx.closePath();
-      minimapCtx.fillStyle = "rgba(56, 189, 248, 0.25)";
+      minimapCtx.fillStyle =
+        spectator.cinematic && spectator.cinematic.active
+          ? "rgba(244, 114, 182, 0.28)"
+          : "rgba(56, 189, 248, 0.25)";
       minimapCtx.fill();
 
       // Drone reticle dot
       minimapCtx.beginPath();
       minimapCtx.arc(0, 0, 3.6, 0, Math.PI * 2);
-      minimapCtx.fillStyle = "#38bdf8";
+      minimapCtx.fillStyle =
+        spectator.cinematic && spectator.cinematic.active ? "#f472b6" : "#38bdf8";
       minimapCtx.fill();
       minimapCtx.restore();
       return;

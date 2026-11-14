@@ -46,8 +46,8 @@ body {
   left: 14px;
   padding: 10px 14px;
   border-left: 3px solid #38bdf8;
-  min-width: 268px;
-  max-width: 320px;
+  min-width: 278px;
+  max-width: 334px;
 }
 
 .hud-top-left.play-mode {
@@ -173,6 +173,12 @@ body {
   color: #38bdf8;
 }
 
+.spec-btn.tour-btn.active {
+  background: rgba(244, 114, 182, 0.18);
+  border-color: #f472b6;
+  color: #f472b6;
+}
+
 .spec-btn.mode-toggle {
   border-color: #f59e0b;
   color: #f59e0b;
@@ -203,6 +209,28 @@ body {
 .lm-pill:hover {
   border-color: #38bdf8;
   color: #f0f6fc;
+}
+
+.cinematic-banner {
+  bottom: 18px;
+  right: 18px;
+  padding: 9px 14px;
+  border-right: 3px solid #f472b6;
+  text-align: right;
+  pointer-events: none;
+}
+
+.cinematic-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+  color: #f472b6;
+}
+
+.cinematic-sub {
+  font-size: 10px;
+  color: #c9d1d9;
+  margin-top: 3px;
 }
 
 .hud-top-right {
@@ -312,7 +340,8 @@ kbd {
   .hud-title {
     font-size: 14px;
   }
-  .landmark-pills {
+  .landmark-pills,
+  .cinematic-banner {
     display: none;
   }
   .hud-top-right {

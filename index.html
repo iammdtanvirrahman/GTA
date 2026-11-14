@@ -35,9 +35,11 @@
       </div>
     </div>
 
-    <div id="vehicleStatus" class="hud-vehicle driving">FREE-CAM DRONE &bull; [Tab] Follow AI</div>
+    <div id="vehicleStatus" class="hud-vehicle driving">BR TRAIN: CRUISING • TEJGAON LINE</div>
 
     <div class="spectator-bar">
+      <button id="btnCinematicTour" class="spec-btn tour-btn" type="button">CINEMATIC TOUR [G]</button>
+      <button id="btnFollowTrain" class="spec-btn" type="button">FOLLOW TRAIN</button>
       <button id="btnFollowTraffic" class="spec-btn" type="button">FOLLOW AI [Tab]</button>
       <button id="btnFreeDrone" class="spec-btn active" type="button">FREE DRONE</button>
       <button id="btnToggleMode" class="spec-btn mode-toggle" type="button">PLAY [V]</button>
@@ -53,6 +55,12 @@
     </div>
   </div>
 
+  <!-- Top-Center Cinematic Flythrough Shot Caption -->
+  <div id="cinematicBanner" class="hud-panel cinematic-banner hidden">
+    <div id="cinematicShotTitle" class="cinematic-title">SHOT 01/07 • SHAHEED TAJUDDIN AHMED AVE</div>
+    <div id="cinematicShotSub" class="cinematic-sub">Arterial corridor sweep • [N] Next Shot</div>
+  </div>
+
   <!-- Top-Right Minimap Radar -->
   <div class="hud-panel hud-top-right">
     <canvas id="minimapCanvas" width="190" height="190"></canvas>
@@ -65,8 +73,8 @@
   <!-- Bottom-Left Controls Legend -->
   <div id="controlsLegend" class="hud-panel hud-bottom-left">
     <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> Fly &bull; <kbd>E</kbd>/<kbd>Q</kbd> Altitude &bull; <kbd>Shift</kbd> Boost</div>
-    <div><kbd>Drag</kbd> Look 360° &bull; <kbd>Scroll</kbd> Zoom / Dolly &bull; <kbd>Space</kbd> Reset</div>
-    <div><kbd>Tab</kbd> Spectate AI Vehicle &bull; <kbd>1-6</kbd> Jump Landmarks</div>
+    <div><kbd>G</kbd> Cinematic Flythrough (<kbd>N</kbd> Next) &bull; <kbd>Tab</kbd> Follow Train / AI</div>
+    <div><kbd>Drag</kbd> Look 360° &bull; <kbd>Scroll</kbd> Zoom &bull; <kbd>1-6</kbd> Landmarks</div>
     <div><kbd>V</kbd> Switch Between Spectator &amp; Playable Mode</div>
   </div>
 
@@ -77,7 +85,7 @@
   <div class="mobile-actions">
     <button id="btnAltUp" class="mobile-btn" type="button">UP [E]</button>
     <button id="btnAltDown" class="mobile-btn" type="button">DOWN [Q]</button>
-    <button id="btnCam" class="mobile-btn" type="button">FOLLOW AI</button>
+    <button id="btnCam" class="mobile-btn" type="button">TOUR [G]</button>
     <button id="btnSprint" class="mobile-btn" type="button">BOOST</button>
     <button id="btnEnterExit" class="mobile-btn primary" type="button">PLAY [V]</button>
   </div>
