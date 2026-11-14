@@ -1,20 +1,20 @@
-# DHAKA '96 — Tejgaon Sector Prototype
+# DHAKA '96 — Tejgaon Sector (Three.js 3D Engine)
 
-Modular 2D GTA-inspired sandbox built on real-world road geometry and landmarks from **Tejgaon, Dhaka**.
+Modular 3D GTA-inspired sandbox built with **Three.js** on real-world Google Maps topology from **Tejgaon, Dhaka**.
 
 ## Architecture
-- `index.html` — Game shell, HUD overlay (health/sprint/speedometer/vehicle info), minimap radar, and mobile touch controls (`sprint` + `enter/exit` buttons).
-- `css/style.css` — VS Code dark-mode layout, responsive canvas sizing, and retro HUD styling.
-- `js/tejgaonMapData.js` — Real-world Google Maps-derived road network, railway track, waterbody, and landmark footprints for Tejgaon (`23.7510°N–23.7730°N`, `90.3860°E–90.4110°E`).
-- `js/physics.js` — Circle-vs-AABB building resolution, point-in-polygon water shore collision, and oriented bounding-box (OBB) vehicle collision physics.
-- `js/player.js` — On-foot player controller with walk/sprint stamina, animated stride/arms, and vehicle enter/exit state.
-- `js/vehicles.js` — Authentic 1990s Dhaka traffic AI & drivable vehicle physics (**Mishuk Baby Taxi**, **Dhaka Cycle Rickshaw**, **'92 Toyota Corolla DX**, **BRTC Double-Decker Bus**, and **DMP Police Jeep**).
-- `js/cityRenderer.js` — Top-down 2D Canvas renderer for the city, landmarks, animated player, detailed 90s vehicles, and live minimap radar.
-- `js/main.js` — Main game loop, camera lead/zoom controller, input manager, and HUD telemetry updater.
+- `index.html` — Three.js import map (`r170`), HUD telemetry (HP, stamina, speedometer, active Tejgaon sub-zone, live GPS coordinates), camera mode toggle (`C`), and top-right 2D radar minimap.
+- `css/style.css` — VS Code-inspired dark HUD styling, responsive viewport, and mobile touch controls.
+- `js/tejgaonMapData.js` — Real-world Google Maps-derived road network, dual-gauge railway track, Hatirjheel & Crescent Lake waterbodies, and Tejgaon landmarks (`23.7510°N–23.7730°N`, `90.3860°E–90.4110°E`).
+- `js/city3dRenderer.js` — Full Three.js 3D world builder & renderer: extruded 3D Tejgaon buildings with rooftop water tanks and billboards, 3D Hatirjheel arch bridge & animated water, dual-rail sleepers, streetlamps, trees, articulated 3D player character, and detailed 3D 90s Dhaka vehicles (**Mishuk Baby Taxi**, **Dhaka Cycle Rickshaw**, **'92 Toyota Corolla DX**, **BRTC Double-Decker Bus**, and **DMP Patrol Jeep** with flashing sirens).
+- `js/physics.js` — Building AABB collision resolution, Hatirjheel shoreline blocking, and vehicle-to-vehicle / pedestrian impulse physics.
+- `js/player.js` — On-foot player controller with walk/sprint stamina and vehicle hijack/exit state.
+- `js/vehicles.js` — Autonomous road-following traffic AI and drivable vehicle handling physics.
+- `js/main.js` — Main 3D simulation loop, chase/top-down/free-orbit camera controller, and 2D minimap radar sync.
 
 ## Controls
-- **Move / Steer:** `W A S D` or `Arrow Keys` (or left touch joystick on mobile)
+- **Move / Drive:** `W A S D` or `Arrow Keys` (or left touch joystick on mobile)
 - **Sprint / Handbrake:** `Shift`
-- **Enter / Hijack / Exit Vehicle:** `F` or `Enter` (or `ENTER / EXIT` button on mobile)
-- **Zoom Camera:** `Mouse Wheel` or `+` / `-`
-- **Free Pan:** `Right-Click Drag` &bull; **Recenter:** `Space`
+- **Hijack / Exit Vehicle:** `F` or `Enter`
+- **Switch 3D Camera (Chase / Classic GTA Top-Down / Street):** `C`
+- **Orbit / Zoom Camera:** `Right-Click Drag` &bull; `Mouse Wheel` or `+` / `-` &bull; `Space` Recenter

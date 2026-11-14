@@ -1,64 +1,87 @@
 import { MAP_CONFIG, ZONES } from "./tejgaonMapData.js";
-import { CityRenderer } from "./cityRenderer.js";
+import { City3DRenderer, generateUrbanLayout } from "./city3dRenderer.js";
 import { buildStaticColliders, resolveEntityCollisions } from "./physics.js";
 import { Player } from "./player.js";
 import { spawnTejgaonTraffic } from "./vehicles.js";
 
 const canvas = document.getElementById("cityCanvas");
-const ctx = canvas.getContext("2d");
 const minimapCanvas = document.getElementById("minimapCanvas");
 const minimapCtx = minimapCanvas.getContext("2d");
 
 const zoneLabel = document.getElementById("zoneLabel");
 const coordLabel = document.getElementById("coordLabel");
-const zoomLabel = document.getElementById("zoomLabel");
+const camModeLabel = document.getElementById("camModeLabel");
 const speedLabel = document.getElementById("speedLabel");
 const healthBar = document.getElementById("healthBar");
 const staminaBar = document.getElementById("staminaBar");
 const vehicleStatus = document.getElementById("vehicleStatus");
 
-const renderer = new CityRenderer();
-const colliders = buildStaticColliders(renderer.urbanFill.blocks);
+const urbanLayout = generateUrbanLayout();
+const renderer3D = new City3DRenderer(canvas, urbanLayout);
+const colliders = buildStaticColliders(urbanLayout.blocks);
 const player = new Player(MAP_CONFIG.spawn.x, MAP_CONFIG.spawn.y);
 const vehicles = spawnTejgaonTraffic();
 
-const camera = {
-  x: player.x,
-  y: player.y,
-  zoom: 0.95,
-  freePan: false
+// 3D Camera Modes: 0 = Chase 3D, 1 = Classic Top-Down 3D, 2 = Low Street View
+const CAM_MODES = [
+  { name: "CHASE 3D", distance: 260, pitch: 0.62, autoAlign: true },
+  { name: "TOP-DOWN 3D", distance: 520, pitch: 1.32, autoAlign: false },
+  { name: "STREET VIEW", distance: 135, pitch: 0.34, autoAlign: true }
+];
+let camModeIdx = 0;
+
+const cameraState = {
+  targetX: player.x,
+  targetZ: player.y,
+  distance: CAM_MODES[0].distance,
+  pitch: CAM_MODES[0].pitch,
+  yaw: player.angle,
+  manualOrbit: false
 };
 
 const keys = new Set();
-let isDragging = false;
+let isOrbiting = false;
 let dragStart = { x: 0, y: 0 };
 let touchVec = { x: 0, y: 0 };
 let mobileSprint = false;
 
-function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-window.addEventListener("resize", resize);
-resize();
+window.addEventListener("resize", () => renderer3D.resize());
 
-// Keyboard input
+function cycleCameraMode() {
+  camModeIdx = (camModeIdx + 1) % CAM_MODES.length;
+  const preset = CAM_MODES[camModeIdx];
+  cameraState.distance = preset.distance;
+  cameraState.pitch = preset.pitch;
+  cameraState.manualOrbit = false;
+  if (!preset.autoAlign) {
+    cameraState.yaw = -Math.PI / 2;
+  }
+  camModeLabel.textContent = `CAM: ${preset.name}`;
+}
+
 window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
 
-  if (!keys.has(k) && (k === "f" || e.code === "Enter")) {
-    player.tryToggleVehicle(vehicles);
-    camera.freePan = false;
+  if (!keys.has(k)) {
+    if (k === "f" || e.code === "Enter") {
+      player.tryToggleVehicle(vehicles);
+    } else if (k === "c") {
+      cycleCameraMode();
+    } else if (e.code === "Space") {
+      const preset = CAM_MODES[camModeIdx];
+      cameraState.distance = preset.distance;
+      cameraState.pitch = preset.pitch;
+      cameraState.manualOrbit = false;
+      cameraState.yaw = preset.autoAlign ? player.angle : -Math.PI / 2;
+    }
   }
 
   keys.add(k);
 
-  if (e.code === "Space") {
-    camera.freePan = false;
-  } else if (k === "=" || k === "+") {
-    camera.zoom = Math.min(2.2, camera.zoom + 0.12);
+  if (k === "=" || k === "+") {
+    cameraState.distance = Math.max(85, cameraState.distance - 30);
   } else if (k === "-" || k === "_") {
-    camera.zoom = Math.max(0.35, camera.zoom - 0.12);
+    cameraState.distance = Math.min(950, cameraState.distance + 30);
   }
 });
 
@@ -71,38 +94,39 @@ canvas.addEventListener(
   "wheel",
   (e) => {
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    camera.zoom = Math.max(0.35, Math.min(2.2, camera.zoom * factor));
+    const factor = e.deltaY > 0 ? 1.1 : 0.9;
+    cameraState.distance = Math.max(85, Math.min(950, cameraState.distance * factor));
   },
   { passive: false }
 );
 
-// Right-click or middle-click free camera pan
+// Right-click or left-drag camera orbit around player/vehicle
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 canvas.addEventListener("mousedown", (e) => {
-  if (e.button === 2 || e.button === 1 || e.shiftKey) {
-    isDragging = true;
-    camera.freePan = true;
+  if (e.button === 2 || e.button === 0 || e.button === 1) {
+    isOrbiting = true;
+    cameraState.manualOrbit = true;
     dragStart = { x: e.clientX, y: e.clientY };
   }
 });
 
 window.addEventListener("mousemove", (e) => {
-  if (!isDragging) return;
-  const dx = (e.clientX - dragStart.x) / camera.zoom;
-  const dy = (e.clientY - dragStart.y) / camera.zoom;
-  camera.x = Math.max(0, Math.min(MAP_CONFIG.width, camera.x - dx));
-  camera.y = Math.max(0, Math.min(MAP_CONFIG.height, camera.y - dy));
+  if (!isOrbiting) return;
+  const dx = e.clientX - dragStart.x;
+  const dy = e.clientY - dragStart.y;
+  cameraState.yaw += dx * 0.0065;
+  cameraState.pitch = Math.max(0.18, Math.min(1.45, cameraState.pitch + dy * 0.005));
   dragStart = { x: e.clientX, y: e.clientY };
 });
 
 window.addEventListener("mouseup", () => {
-  isDragging = false;
+  isOrbiting = false;
 });
 
 // Mobile Touch Joystick & Action Buttons
 const touchZone = document.getElementById("touchZone");
 const touchKnob = document.getElementById("touchKnob");
+const btnCam = document.getElementById("btnCam");
 const btnSprint = document.getElementById("btnSprint");
 const btnEnterExit = document.getElementById("btnEnterExit");
 
@@ -129,6 +153,7 @@ touchZone.addEventListener("touchend", () => {
   touchVec = { x: 0, y: 0 };
 });
 
+btnCam.addEventListener("click", cycleCameraMode);
 btnSprint.addEventListener("touchstart", (e) => {
   e.preventDefault();
   mobileSprint = true;
@@ -138,20 +163,40 @@ btnSprint.addEventListener("touchend", () => {
 });
 btnEnterExit.addEventListener("click", () => {
   player.tryToggleVehicle(vehicles);
-  camera.freePan = false;
 });
 
 function gatherInput() {
-  let moveX = touchVec.x;
-  let moveY = touchVec.y;
-  if (keys.has("w") || keys.has("arrowup")) moveY -= 1;
-  if (keys.has("s") || keys.has("arrowdown")) moveY += 1;
-  if (keys.has("a") || keys.has("arrowleft")) moveX -= 1;
-  if (keys.has("d") || keys.has("arrowright")) moveX += 1;
+  let rawX = touchVec.x;
+  let rawY = touchVec.y;
+  if (keys.has("w") || keys.has("arrowup")) rawY -= 1;
+  if (keys.has("s") || keys.has("arrowdown")) rawY += 1;
+  if (keys.has("a") || keys.has("arrowleft")) rawX -= 1;
+  if (keys.has("d") || keys.has("arrowright")) rawX += 1;
+
+  // When driving, A/D always steers vehicle left/right and W/S throttles/reverses.
+  if (player.inVehicle) {
+    return {
+      moveX: rawX,
+      moveY: rawY,
+      sprint: keys.has("shift") || mobileSprint
+    };
+  }
+
+  // On foot: map movement relative to camera yaw so W always walks forward into the 3D scene
+  if (rawX === 0 && rawY === 0) {
+    return { moveX: 0, moveY: 0, sprint: keys.has("shift") || mobileSprint };
+  }
+
+  const forward = -rawY;
+  const strafe = rawX;
+  const fx = Math.cos(cameraState.yaw);
+  const fy = Math.sin(cameraState.yaw);
+  const rx = -fy;
+  const ry = fx;
 
   return {
-    moveX,
-    moveY,
+    moveX: fx * forward + rx * strafe,
+    moveY: fy * forward + ry * strafe,
     sprint: keys.has("shift") || mobileSprint
   };
 }
@@ -161,7 +206,6 @@ function updateHUD() {
   const lat = maxLat - (player.y / MAP_CONFIG.height) * (maxLat - minLat);
   const lng = minLng + (player.x / MAP_CONFIG.width) * (maxLng - minLng);
   coordLabel.textContent = `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
-  zoomLabel.textContent = `${camera.zoom.toFixed(2)}x`;
 
   healthBar.style.width = `${(player.health / player.maxHealth) * 100}%`;
   staminaBar.style.width = `${(player.stamina / player.maxStamina) * 100}%`;
@@ -196,10 +240,10 @@ let lastTime = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
+  const elapsed = now * 0.001;
 
   const input = gatherInput();
 
-  // Update vehicles first so player stays locked to vehicle coordinates when driving
   for (const v of vehicles) {
     v.update(dt, input, colliders, vehicles);
   }
@@ -207,20 +251,23 @@ function loop(now) {
   player.update(dt, input, colliders);
   resolveEntityCollisions(player, vehicles);
 
-  if (input.moveX !== 0 || input.moveY !== 0) {
-    camera.freePan = false;
+  // Smoothly follow player/vehicle in 3D space
+  const leadX = player.inVehicle ? player.inVehicle.vx * 0.16 : 0;
+  const leadZ = player.inVehicle ? player.inVehicle.vy * 0.16 : 0;
+  cameraState.targetX += (player.x + leadX - cameraState.targetX) * 9 * dt;
+  cameraState.targetZ += (player.y + leadZ - cameraState.targetZ) * 9 * dt;
+
+  // Auto-align camera behind vehicle when driving in Chase/Street mode
+  const preset = CAM_MODES[camModeIdx];
+  if (preset.autoAlign && player.inVehicle && !isOrbiting && !cameraState.manualOrbit) {
+    let diff = player.inVehicle.angle - cameraState.yaw;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    cameraState.yaw += diff * 3.5 * dt;
   }
 
-  if (!camera.freePan) {
-    // Dynamic camera lead when driving fast
-    const leadX = player.inVehicle ? player.inVehicle.vx * 0.22 : 0;
-    const leadY = player.inVehicle ? player.inVehicle.vy * 0.22 : 0;
-    camera.x += (player.x + leadX - camera.x) * 8 * dt;
-    camera.y += (player.y + leadY - camera.y) * 8 * dt;
-  }
-
-  renderer.renderWorld(ctx, camera, player, vehicles);
-  renderer.renderMinimap(minimapCtx, camera, player, vehicles);
+  renderer3D.renderWorld(cameraState, player, vehicles, elapsed);
+  renderer3D.renderMinimap(minimapCtx, player, vehicles);
   updateHUD();
 
   requestAnimationFrame(loop);
